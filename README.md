@@ -1,36 +1,83 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# SafeWay — bolalar uchun xavfsiz yo'l
 
-## Getting Started
+Ota-onalar va maktablar uchun xavf xaritasi: xavf qo'shish, "+1 Men ham ko'rdim", xavfsiz yo'nalish,
+500 m radar, favqulodda raqamlar, moderator paneli va Telegram xabarnomalari. UZ / RU / EN, dark/light.
 
-First, run the development server:
+## Ishga tushirish
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+npm install
+cp .env.example .env.local   # ixtiyoriy: Telegram va AUTH_SECRET
+npm run dev                  # http://localhost:3000
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Birinchi so'rovda `data/db.json` demo ma'lumotlar (Toshkent bo'ylab 14 ta xavf) bilan avtomatik yaratiladi.
+Qayta boshlash uchun `data/` papkasini o'chiring.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+| Rol | Email | Parol |
+|---|---|---|
+| Parent | parent@safeway.uz | parent123 |
+| School Admin | school@safeway.uz | school123 |
+| Super Admin | admin@safeway.uz | admin123 |
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+## Struktura
 
-## Learn More
+```
+app/
+  page.tsx, landing.tsx          Bosh sahifa (hero, statistika, so'nggi xabarlar)
+  map/                           Xarita + filtrlar + "Atrofimdagi xavflar" (500 m)
+  route/                         Xavfsiz yo'nalish (Uy → Maktab)
+  login/                         Kirish / Ro'yxatdan o'tish
+  admin/                         Moderator paneli: KPI, grafiklar, jadval, Telegram log
+  api/
+    auth/{login,signup,logout,me}
+    hazards/            GET (filtr: category, status, lat/lng/radius), POST
+    hazards/[id]        PATCH (status/severity/category), DELETE   — faqat admin
+    hazards/[id]/confirm POST — +1 ovozni yoqish/o'chirish
+    upload, uploads/[file]       Rasm yuklash (JPG/PNG/WEBP, ≤ 4.5 MB)
+    route-plan          OSRM + xavf bo'yicha baholash + aylanma yo'l
+    geocode             Nominatim manzil qidiruvi (server orqali)
+    admin/stats         Dashboard statistikasi
+components/                      App shell, bottom nav, SOS panel, report modal, xarita, kartochkalar
+lib/
+  store.ts     JSON fayl bazasi (Prisma modellari bilan 1:1)
+  auth.ts      JWT (jose) + httpOnly cookie, rollar
+  routing.ts   Xavfsiz yo'nalish algoritmi
+  telegram.ts  Telegram xabar shabloni va yuborish
+  i18n.ts      UZ / RU / EN lug'atlar
+proxy.ts       /admin uchun optimistik himoya (API har so'rovda rolni qayta tekshiradi)
+prisma/        PostgreSQL + PostGIS sxemasi va ST_DWithin indeks/trigger
+```
 
-To learn more about Next.js, take a look at the following resources:
+## Xavfsiz yo'nalish qanday ishlaydi
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+1. OSRM (piyoda profili) dan to'g'ri yo'l va muqobillar olinadi.
+2. Har bir yo'l 60 m bufer ichidagi faol xavflar bo'yicha baholanadi: past = 2, o'rta = 10, yuqori = 100.
+3. Eng yaxshi yo'l hali ham qizil xavfdan o'tsa, xavf atrofida 250/450 m uzoqlikdagi oraliq nuqtalar
+   orqali aylanma yo'llar sinab ko'riladi (to'g'ri yo'ldan 2.2 baravardan uzun bo'lmagan).
+4. Eng past xavfli (teng bo'lsa — eng qisqa) yo'l yashil chiziq bilan chiziladi.
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+Marshrut serveri javob bermasa, to'g'ri chiziq va ogohlantirish ko'rsatiladi.
 
-## Deploy on Vercel
+## Telegram
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+`.env.local` da `TELEGRAM_BOT_TOKEN` va `TELEGRAM_CHAT_ID` ni to'ldiring — yangi 🔴 yuqori xavf guruhga
+yuboriladi. Bo'sh qolsa, simulyatsiya rejimi: xabar admin panelida va xavf qo'shilgandan keyin preview
+sifatida ko'rinadi.
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+## Netlify
+
+Hech narsa sozlash shart emas: Netlify'da ma'lumotlar va rasmlar avtomatik ravishda **Netlify Blobs**
+(`safeway` store) da saqlanadi, chunki serverless funksiyalarda fayl tizimi faqat o'qish uchun.
+Lokal ishga tushirganda esa `./data` ishlatiladi ([lib/storage.ts](lib/storage.ts)).
+
+`AUTH_SECRET` ixtiyoriy — berilmasa, tasodifiy kalit bir marta yaratilib, ma'lumotlar bilan saqlanadi.
+Telegram uchun: Site settings → Environment variables → `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID`.
+
+## Production'ga o'tish
+
+- **Baza:** `prisma/schema.prisma` + `prisma/postgis.sql` ni qo'llang va `lib/store.ts` funksiyalarini
+  Prisma chaqiruvlari bilan almashtiring (imzolar o'zgarmaydi). Radius so'rovi uchun `ST_DWithin` misoli SQL faylda.
+- **Rasmlar:** `app/api/upload/route.ts` ni Supabase Storage yoki Cloudinary'ga yo'naltiring.
+- **Google login:** tugma tayyor; NextAuth/Supabase Google provider'ni ulang.
+- **OSRM / Nominatim:** ochiq demo serverlar — katta trafik uchun o'z serveringizni ko'taring.
