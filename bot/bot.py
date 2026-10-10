@@ -21,6 +21,7 @@ from aiogram.types import (
 
 import config
 import db
+import notify
 from handlers import setup_routers
 from i18n import DEFAULT_LANG, LANGS, t
 from middlewares import UserMiddleware
@@ -89,9 +90,12 @@ async def main() -> None:
     me = await bot.get_me()
     log.info("Bot ishga tushdi: @%s", me.username)
 
+    # Saytda qo'shilgan 🔴 xavflarni obunachilarga yetkazish
+    watcher = asyncio.create_task(notify.watch_web_hazards(bot))
     try:
         await dp.start_polling(bot, allowed_updates=dp.resolve_used_update_types())
     finally:
+        watcher.cancel()
         await bot.session.close()
         await db.close_db()
 

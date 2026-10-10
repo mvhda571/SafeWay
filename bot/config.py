@@ -65,6 +65,8 @@ SEVERITIES = ("low", "medium", "high")
 STATUSES = ("active", "investigating", "resolved")
 
 NEARBY_RADIUS = 500        # "Atrofimda" qidiruv radiusi, metr
+WEB_POLL_INTERVAL = 15     # saytda qo'shilgan 🔴 xavflarni tekshirish oralig'i, soniya
+WEB_ALERT_MAX_AGE = 3600   # bundan eski sayt xavflari e'lon qilinmaydi, soniya
 NEARBY_LIMIT = 10          # "Atrofimda" ro'yxatidagi eng ko'p xavflar soni
 DESCRIPTION_MAX = 500      # izohning eng ko'p uzunligi
 PHOTO_MAX_SIDE = 1280      # saqlanadigan rasmning eng katta tomoni, px

@@ -1,7 +1,8 @@
 /**
  * Seeds MongoDB with demo users and the 14 demo hazards around Tashkent.
  *
- *   npm run seed           # demo users are upserted; hazards are inserted only if the collection is empty
+ *   npm run seed           # demo users are created if missing (existing accounts are never changed);
+ *                          # hazards are inserted only if the collection is empty
  *   npm run seed -- --reset  # wipes hazards, images and the Telegram log first
  *
  * Reads MONGODB_URI from .env.local (or the environment).
@@ -21,10 +22,10 @@ const USERS = [
 
 type Row = [string, string, Category, Severity, Status, number, number, number, number, string];
 const HAZARDS: Row[] = [
-  ["Ochiq lyuk — Bunyodkor shoh ko'chasi", "Piyodalar yo'lagida qopqog'i yo'q lyuk, kechasi ko'rinmaydi.", "open_manhole", "medium", "active", 41.2856, 69.2041, 1, 7, "Bunyodkor shoh ko'chasi, Chilonzor tumani"],
+  ["Ochiq lyuk — Bunyodkor shoh ko'chasi", "Piyodalar yo'lagida qopqog'i yo'q lyuk, kechasi ko'rinmaydi.", "open_manhole", "high", "active", 41.2856, 69.2041, 1, 7, "Bunyodkor shoh ko'chasi, Chilonzor tumani"],
   ["Yoritilmagan ko'cha — Qatortol", "Maktabga boradigan yo'lda 300 m davomida chiroqlar yonmaydi.", "unlit_street", "low", "active", 41.2925, 69.2133, 2, 4, "Qatortol ko'chasi, Chilonzor tumani"],
   ["Tezkor haydovchilar — Chilonzor 9-kvartal", "Maktab oldida svetofor yo'q, mashinalar 80+ km/soat tezlikda yuradi.", "speeding", "high", "active", 41.2789, 69.1978, 0, 12, "Chilonzor 9-kvartal"],
-  ["Qarovsiz itlar — Novza bekati", "Ertalab 5-6 ta it to'dasi bolalarga tashlanmoqda.", "stray_dogs", "medium", "investigating", 41.2903, 69.2245, 3, 9, "Novza metro bekati yonida"],
+  ["Qarovsiz itlar — Novza bekati", "Ertalab 5-6 ta it to'dasi bolalarga tashlanmoqda.", "stray_dogs", "high", "investigating", 41.2903, 69.2245, 3, 9, "Novza metro bekati yonida"],
   ["Ochiq lyuk — Amir Temur xiyoboni yonida", "Ta'mirlash ishlaridan keyin lyuk ochiq qolgan.", "open_manhole", "high", "active", 41.3115, 69.2795, 0, 15, "Amir Temur xiyoboni, Yunusobod tumani"],
   ["Yoritilmagan bog' yo'lagi — Yunusobod 4", "Bog' ichidagi yo'lak butunlay qorong'i.", "unlit_street", "low", "resolved", 41.3652, 69.2867, 9, 3, "Yunusobod 4-mavze"],
   ["Tezkor haydovchilar — Amir Temur shoh ko'chasi", "Piyodalar o'tish joyida mashinalar to'xtamaydi.", "speeding", "high", "investigating", 41.3401, 69.2849, 1, 21, "Amir Temur shoh ko'chasi"],
@@ -33,7 +34,7 @@ const HAZARDS: Row[] = [
   ["Yoritilmagan ko'cha — Olmazor", "Maktab ortidagi ko'chada chiroqlar o'g'irlangan.", "unlit_street", "low", "active", 41.3466, 69.2101, 5, 2, "Olmazor tumani"],
   ["Tezkor haydovchilar — Farg'ona yo'li", "Katta yo'lni kesib o'tishda yer osti o'tish joyi yo'q.", "speeding", "high", "active", 41.2934, 69.3248, 2, 17, "Farg'ona yo'li ko'chasi"],
   ["Qarovsiz itlar — Shayxontohur", "Bozor yonida itlar to'dasi.", "stray_dogs", "low", "resolved", 41.3254, 69.2361, 15, 4, "Shayxontohur tumani"],
-  ["Ochiq lyuk — Yakkasaroy", "Trotuar o'rtasida chuqur, to'siq qo'yilmagan.", "open_manhole", "high", "active", 41.2951, 69.2632, 0, 8, "Yakkasaroy tumani"],
+  ["Ochiq lyuk — Yakkasaroy", "Trotuar o'rtasida chuqur, to'siq qo'yilmagan.", "open_manhole", "medium", "active", 41.2951, 69.2632, 0, 8, "Yakkasaroy tumani"],
   ["Yoritilmagan ko'cha — Mirobod", "Temir yo'l ko'prigi ostida yoritish yo'q.", "unlit_street", "medium", "investigating", 41.2988, 69.2885, 6, 5, "Mirobod tumani"],
 ];
 
@@ -45,9 +46,10 @@ async function main() {
 
   const ids: Record<string, string> = {};
   for (const u of USERS) {
+    // $setOnInsert: an existing account (and its password) is left untouched.
     const doc = await UserModel.findOneAndUpdate(
       { email: u.email },
-      { $set: { name: u.name, role: u.role, passwordHash: await bcrypt.hash(u.password, 10) } },
+      { $setOnInsert: { name: u.name, role: u.role, passwordHash: await bcrypt.hash(u.password, 10) } },
       { upsert: true, new: true },
     );
     ids[u.key] = doc._id.toString();

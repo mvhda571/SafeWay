@@ -82,6 +82,11 @@ export function Landing() {
           </motion.div>
         ))}
       </section>
+      <div className="mt-3 flex justify-end">
+        <Link href="/stats" className="inline-flex min-h-11 items-center gap-1 text-sm font-semibold text-emerald-600 md:min-h-0">
+          {t("stats.more")} <ArrowRight className="size-4" />
+        </Link>
+      </div>
 
       {/* Features */}
       <section className="py-16">

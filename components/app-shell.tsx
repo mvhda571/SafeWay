@@ -4,7 +4,7 @@ import { Suspense } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { motion } from "framer-motion";
-import { Home, LayoutDashboard, LogIn, LogOut, Map, Moon, Navigation, Plus, Shield, Sun, UserRound } from "lucide-react";
+import { BarChart3, Home, LayoutDashboard, LogIn, LogOut, Map, Moon, Navigation, Plus, Shield, Sun, UserRound } from "lucide-react";
 import type { Locale } from "@/lib/i18n";
 import { useI18n, useAuth, useUi } from "./providers";
 import { EmergencyBar } from "./emergency-bar";
@@ -26,6 +26,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     { href: "/", label: t("nav.home"), icon: Home },
     { href: "/map", label: t("nav.map"), icon: Map },
     { href: "/route", label: t("nav.route"), icon: Navigation },
+    { href: "/stats", label: t("nav.stats"), icon: BarChart3 },
     ...(admin ? [{ href: "/admin", label: t("nav.admin"), icon: LayoutDashboard }] : []),
   ];
 

@@ -246,6 +246,10 @@ const uz = {
   "profile.telegramHint": "Bot yaqiningizdagi yuqori xavflar haqida xabar beradi",
   "profile.adminPanel": "Admin panel",
   "err.invalid_lang": "Til noto'g'ri",
+  "nav.stats": "Statistika",
+  "stats.title": "Statistika",
+  "stats.subtitle": "Barcha raqamlar bazadan jonli olinadi va har 30 soniyada yangilanadi",
+  "stats.more": "Batafsil statistika",
   "theme.toggle": "Mavzuni almashtirish",
 };
 
@@ -497,6 +501,10 @@ const ru: Dict = {
   "profile.telegramHint": "Бот сообщит о высоких опасностях рядом с вами",
   "profile.adminPanel": "Админ-панель",
   "err.invalid_lang": "Неверный язык",
+  "nav.stats": "Статистика",
+  "stats.title": "Статистика",
+  "stats.subtitle": "Все цифры берутся из базы и обновляются каждые 30 секунд",
+  "stats.more": "Подробная статистика",
   "theme.toggle": "Сменить тему",
 };
 
@@ -745,6 +753,10 @@ const en: Dict = {
   "profile.telegramHint": "The bot warns you about high-risk hazards near you",
   "profile.adminPanel": "Admin panel",
   "err.invalid_lang": "Invalid language",
+  "nav.stats": "Statistics",
+  "stats.title": "Statistics",
+  "stats.subtitle": "Live numbers from the database, refreshed every 30 seconds",
+  "stats.more": "Detailed statistics",
   "theme.toggle": "Toggle theme",
 };
 

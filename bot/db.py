@@ -3,7 +3,7 @@ MongoDB bilan ishlash (pymongo async — AsyncMongoClient).
 Kolleksiya va maydon nomlari web saytdagi Mongoose modellari bilan bir xil.
 """
 import logging
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 from bson import Binary, ObjectId
 from pymongo import ASCENDING, DESCENDING, GEOSPHERE, AsyncMongoClient, ReturnDocument
@@ -229,6 +229,8 @@ async def create_hazard(
         "resolvedAt": None,
         "createdAt": ts,
         "updatedAt": ts,
+        # Bot xavfi on_new_hazard orqali darhol e'lon qilinadi; sayt kuzatuvchisi uni o'tkazib yuboradi
+        "botNotifiedAt": ts,
         "__v": 0,
     }
     await hazards.insert_one(doc)
@@ -248,6 +250,26 @@ async def create_hazard(
             await hazards.update_one({"_id": doc["_id"]}, {"$set": {"hasImage": False}})
             doc["hasImage"] = False
     return doc
+
+
+async def claim_web_high_hazard(max_age_s: int) -> dict | None:
+    """
+    Saytda qo'shilgan, hali e'lon qilinmagan 🔴 xavfni atomik "band qiladi" (botNotifiedAt qo'yadi)
+    va qaytaradi. Bir nechta bot nusxasi ishlasa ham har bir xavf faqat bir marta e'lon qilinadi.
+    max_age_s dan eski xavflar e'tiborsiz qoldiriladi (bot uzoq to'xtab qolgan bo'lsa, eski xabarlar ketmasin).
+    """
+    return await hazards.find_one_and_update(
+        {
+            "severity": "high",
+            "status": {"$ne": "resolved"},
+            "source": {"$ne": "bot"},
+            "botNotifiedAt": None,  # null yoki umuman yo'q
+            "createdAt": {"$gte": now() - timedelta(seconds=max_age_s)},
+        },
+        {"$set": {"botNotifiedAt": now()}},
+        sort=[("createdAt", ASCENDING)],
+        return_document=ReturnDocument.AFTER,
+    )
 
 
 async def get_hazard(hazard_id: ObjectId) -> dict | None:

@@ -67,6 +67,23 @@ scripts/seed.ts  Demo ma'lumotlar
 Har bir yangi 🔴 yuqori xavf kanalga yuboriladi: tur, manzil, izoh, Google Maps va saytdagi xavf sahifasi havolasi.
 Telegram xato bersa ham xavf saqlanadi; natija admin panelidagi jurnalda ko'rinadi. O'zgaruvchilar bo'sh bo'lsa — simulyatsiya.
 
+## Telegram bot (`bot/`)
+
+Python (aiogram) bot sayt bilan **bitta bazada** ishlaydi (`bot/.env`: `BOT_TOKEN`, `MONGODB_URI`, `MONGODB_DB=safeway`, `ADMIN_IDS`).
+
+```bash
+cd bot && pip install -r requirements.txt && python bot.py
+```
+
+- Bot obunachilari `users` kolleksiyasida, sayt hisoblari `webusers`da.
+- Ovozlar ikkala tomonda `voters` + `upvotes`; bot rasmlari `hazardimages`da (saytda ham ko'rinadi).
+- Saytda qo'shilgan 🔴 xavfni bot har 15 s da tekshiradi va obunachilarga yuboradi (`botNotifiedAt` bilan bir marta).
+- Eski ma'lumotni shu sxemaga o'tkazish: `npm run migrate` (qayta ishga tushirish xavfsiz).
+
+## Statistika
+
+`/stats` — hammaga ochiq, faqat o'qish uchun (`GET /api/stats`). Admin amallari (status, o'chirish) faqat `/admin`da.
+
 ## Netlify
 
 Site settings → Environment variables: `MONGODB_URI`, `AUTH_SECRET`, `BOT_TOKEN`, `TELEGRAM_CHANNEL_ID`,

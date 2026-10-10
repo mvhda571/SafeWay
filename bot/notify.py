@@ -284,6 +284,26 @@ async def broadcast_high_hazard(bot: Bot, hazard: dict) -> None:
     )
 
 
+async def watch_web_hazards(bot: Bot) -> None:
+    """
+    Saytda qo'shilgan 🔴 xavflarni kuzatadi va obunachilarga bot ichida qo'shilgandek yuboradi.
+    Sayt Netlify'da ishlaydi (10 s limit), shuning uchun ommaviy yuborishni bot bajaradi.
+    """
+    log.info("Sayt xavflari kuzatilmoqda (har %s s)", config.WEB_POLL_INTERVAL)
+    while True:
+        try:
+            while (hazard := await db.claim_web_high_hazard(config.WEB_ALERT_MAX_AGE)) is not None:
+                log.info("Saytdagi yuqori xavf e'lon qilinmoqda: %s", hazard["_id"])
+                await broadcast_high_hazard(bot, hazard)
+        except asyncio.CancelledError:
+            raise
+        except PyMongoError as exc:
+            log.warning("Sayt xavflarini o'qib bo'lmadi: %s", exc)
+        except Exception:  # noqa: BLE001 — kuzatuv hech qachon to'xtab qolmasin
+            log.exception("Sayt xavfini e'lon qilishda xato")
+        await asyncio.sleep(config.WEB_POLL_INTERVAL)
+
+
 async def on_new_hazard(bot: Bot, hazard: dict) -> None:
     """Yangi xavf saqlangandan keyin fonda chaqiriladi."""
     try:

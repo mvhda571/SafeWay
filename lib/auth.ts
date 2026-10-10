@@ -84,7 +84,13 @@ export async function handle(fn: () => Promise<Response>): Promise<Response> {
     unstable_rethrow(e);
     if (e instanceof HttpError) return Response.json({ error: e.message, code: e.code, ...e.extra }, { status: e.status });
     console.error(e);
-    const db = e instanceof Error && /mongo|MONGODB_URI|ECONNREFUSED|querySrv/i.test(`${e.name} ${e.message}`);
+    // Unique index race (e.g. two sign-ups with the same email at once).
+    if ((e as { code?: number }).code === 11000) {
+      return Response.json({ error: "Already exists", code: "email_taken" }, { status: 409 });
+    }
+    // Only real connection problems are "database unavailable" — not every Mongo error.
+    const db = e instanceof Error &&
+      (/^Mongo(ServerSelection|Network|NetworkTimeout)Error$/.test(e.name) || /MONGODB_URI|ECONNREFUSED|querySrv|ENOTFOUND/.test(e.message));
     return Response.json(
       { error: db ? "Database unavailable" : "Internal error", code: db ? "db_unavailable" : "internal" },
       { status: db ? 503 : 500 },

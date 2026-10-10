@@ -28,6 +28,14 @@ export interface SavedPlace { lat: number; lng: number; label: string }
 
 export type PublicUser = Omit<User, "passwordHash">;
 
+export interface PublicStats {
+  total: number; resolved: number; resolvedPct: number; highActive: number; confirmations: number;
+  byStatus: { key: Status; count: number }[];
+  byCategory: { key: Category; count: number }[];
+  bySeverity: { key: Severity; count: number }[];
+  daily: { date: string; count: number }[];
+}
+
 export interface ProfileStats { reported: number; resolved: number; confirmed: number }
 
 /** All ids are MongoDB ObjectId hex strings (24 chars). */
