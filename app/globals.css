@@ -1,26 +1,100 @@
 @import "tailwindcss";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
+@custom-variant dark (&:where(.dark, .dark *));
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
+@theme {
+  --font-sans: var(--font-inter), system-ui, -apple-system, "Segoe UI", sans-serif;
+  --color-brand-50: #ecfdf5;
+  --color-brand-400: #34d399;
+  --color-brand-500: #10b981;
+  --color-brand-600: #059669;
+  --color-sev-low: #facc15;
+  --color-sev-medium: #f97316;
+  --color-sev-high: #ef4444;
+  --animate-pulse-ring: pulse-ring 1.8s cubic-bezier(0.2, 0.6, 0.4, 1) infinite;
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+  @keyframes pulse-ring {
+    0% { transform: scale(0.6); opacity: 0.8; }
+    100% { transform: scale(2.4); opacity: 0; }
   }
 }
 
-body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+:root {
+  --bg: #f6f7f9;
+  --fg: #0b0b0f;
+  color-scheme: light;
 }
+.dark {
+  --bg: #07080b;
+  --fg: #f4f4f5;
+  color-scheme: dark;
+}
+
+body {
+  background: var(--bg);
+  color: var(--fg);
+}
+
+/* Ambient gradient behind everything */
+.bg-aurora {
+  background:
+    radial-gradient(60rem 40rem at 10% -10%, rgb(16 185 129 / 0.16), transparent 60%),
+    radial-gradient(50rem 30rem at 110% 10%, rgb(99 102 241 / 0.14), transparent 60%),
+    radial-gradient(40rem 30rem at 50% 120%, rgb(239 68 68 / 0.10), transparent 60%);
+}
+
+@utility glass {
+  background-color: rgb(255 255 255 / 0.75);
+  backdrop-filter: blur(16px) saturate(160%);
+  -webkit-backdrop-filter: blur(16px) saturate(160%);
+  border: 1px solid rgb(0 0 0 / 0.06);
+  .dark & {
+    background-color: rgb(24 24 27 / 0.72);
+    border-color: rgb(255 255 255 / 0.08);
+  }
+}
+
+@utility neon-red {
+  border-color: rgb(239 68 68 / 0.6) !important;
+  box-shadow: 0 0 0 1px rgb(239 68 68 / 0.35), 0 0 24px -4px rgb(239 68 68 / 0.55), inset 0 0 12px -6px rgb(239 68 68 / 0.5);
+}
+
+/* ---------- Leaflet ---------- */
+.leaflet-container {
+  font: inherit;
+  background: #e5e7eb;
+}
+.dark .leaflet-container { background: #111318; }
+.dark .leaflet-tile-pane { filter: invert(0.92) hue-rotate(180deg) brightness(0.9) contrast(0.9) saturate(0.6); }
+.leaflet-popup-content-wrapper, .leaflet-popup-tip {
+  background: rgb(255 255 255 / 0.92);
+  backdrop-filter: blur(12px);
+  border-radius: 1rem;
+  box-shadow: 0 20px 40px -12px rgb(0 0 0 / 0.35);
+}
+.dark .leaflet-popup-content-wrapper, .dark .leaflet-popup-tip { background: rgb(24 24 27 / 0.95); color: #f4f4f5; }
+.leaflet-popup-content { margin: 12px 14px; }
+.leaflet-control-zoom a { border-radius: 0.75rem !important; }
+.leaflet-control-zoom { border: none !important; box-shadow: 0 8px 24px -8px rgb(0 0 0 / 0.3) !important; border-radius: 0.75rem !important; overflow: hidden; }
+.dark .leaflet-control-zoom a { background: #18181b; color: #f4f4f5; border-color: #27272a; }
+.dark .leaflet-control-attribution { background: rgb(24 24 27 / 0.7); color: #a1a1aa; }
+.dark .leaflet-control-attribution a { color: #d4d4d8; }
+
+.sw-pin { position: relative; width: 34px; height: 44px; }
+.sw-pin .ring {
+  position: absolute; left: 7px; top: 27px; width: 20px; height: 20px; border-radius: 9999px;
+  background: var(--c); opacity: 0.5; animation: pulse-ring 1.8s cubic-bezier(0.2, 0.6, 0.4, 1) infinite;
+}
+.sw-pin svg { position: relative; filter: drop-shadow(0 6px 8px rgb(0 0 0 / 0.35)); }
+.sw-pin.resolved { opacity: 0.55; }
+.sw-dot {
+  width: 18px; height: 18px; border-radius: 9999px; background: #3b82f6;
+  border: 3px solid white; box-shadow: 0 0 0 6px rgb(59 130 246 / 0.25);
+}
+.sw-endpoint {
+  width: 30px; height: 30px; border-radius: 9999px; display: grid; place-items: center;
+  color: white; font-size: 15px; border: 3px solid white; box-shadow: 0 8px 18px -6px rgb(0 0 0 / 0.5);
+}
+
+.no-scrollbar::-webkit-scrollbar { display: none; }
+.no-scrollbar { scrollbar-width: none; }
