@@ -4,18 +4,7 @@ import { useEffect, useState } from "react";
 import Script from "next/script";
 import { usePathname, useRouter } from "next/navigation";
 
-interface TgWebApp {
-  initData: string;
-  ready(): void;
-  expand(): void;
-  safeAreaInset?: { top: number; bottom: number };
-  contentSafeAreaInset?: { top: number; bottom: number };
-  onEvent(e: string, cb: () => void): void;
-  BackButton: { show(): void; hide(): void; onClick(cb: () => void): void; offClick(cb: () => void): void };
-}
-declare global {
-  interface Window { Telegram?: { WebApp?: TgWebApp } }
-}
+import type { TgWebApp } from "@/lib/use-telegram";
 
 /**
  * Telegram Mini App integration. Outside Telegram it does nothing (initData is empty).

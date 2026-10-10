@@ -7,8 +7,12 @@ export interface TgWebApp {
   expand(): void;
   close(): void;
   colorScheme: "light" | "dark";
+  initData: string;
   initDataUnsafe: { user?: { id: number; first_name: string; last_name?: string; username?: string } };
   themeParams: { bg_color?: string; text_color?: string; button_color?: string; button_text_color?: string };
+  safeAreaInset?: { top: number; bottom: number };
+  contentSafeAreaInset?: { top: number; bottom: number };
+  onEvent(event: string, cb: () => void): void;
   MainButton: {
     text: string;
     isVisible: boolean;
@@ -33,7 +37,7 @@ export interface TgWebApp {
 }
 
 declare global {
-  interface Window { Telegram?: { WebApp: TgWebApp } }
+  interface Window { Telegram?: { WebApp?: TgWebApp } }
 }
 
 let _tg: TgWebApp | null = null;
@@ -44,7 +48,7 @@ export function useTelegram() {
   useEffect(() => {
     if (_tg) { setTg(_tg); return; }
     const wa = window.Telegram?.WebApp;
-    if (!wa) return;
+    if (!wa?.initData) return;
     wa.ready();
     wa.expand();
     _tg = wa;
