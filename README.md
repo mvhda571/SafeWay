@@ -7,7 +7,7 @@ Ota-onalar va maktablar uchun xavf xaritasi: xavf qo'shish, "+1 Men ham ko'rdim"
 
 ```bash
 npm install
-cp .env.example .env.local   # AUTH_SECRET ni o'zgartiring
+cp .env.example .env.local   # ixtiyoriy: Telegram va AUTH_SECRET
 npm run dev                  # http://localhost:3000
 ```
 
@@ -34,7 +34,7 @@ app/
     hazards/            GET (filtr: category, status, lat/lng/radius), POST
     hazards/[id]        PATCH (status/severity/category), DELETE   — faqat admin
     hazards/[id]/confirm POST — +1 ovozni yoqish/o'chirish
-    upload, uploads/[file]       Rasm yuklash (JPG/PNG/WEBP, ≤ 5 MB)
+    upload, uploads/[file]       Rasm yuklash (JPG/PNG/WEBP, ≤ 4.5 MB)
     route-plan          OSRM + xavf bo'yicha baholash + aylanma yo'l
     geocode             Nominatim manzil qidiruvi (server orqali)
     admin/stats         Dashboard statistikasi
@@ -64,6 +64,15 @@ Marshrut serveri javob bermasa, to'g'ri chiziq va ogohlantirish ko'rsatiladi.
 `.env.local` da `TELEGRAM_BOT_TOKEN` va `TELEGRAM_CHAT_ID` ni to'ldiring — yangi 🔴 yuqori xavf guruhga
 yuboriladi. Bo'sh qolsa, simulyatsiya rejimi: xabar admin panelida va xavf qo'shilgandan keyin preview
 sifatida ko'rinadi.
+
+## Netlify
+
+Hech narsa sozlash shart emas: Netlify'da ma'lumotlar va rasmlar avtomatik ravishda **Netlify Blobs**
+(`safeway` store) da saqlanadi, chunki serverless funksiyalarda fayl tizimi faqat o'qish uchun.
+Lokal ishga tushirganda esa `./data` ishlatiladi ([lib/storage.ts](lib/storage.ts)).
+
+`AUTH_SECRET` ixtiyoriy — berilmasa, tasodifiy kalit bir marta yaratilib, ma'lumotlar bilan saqlanadi.
+Telegram uchun: Site settings → Environment variables → `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID`.
 
 ## Production'ga o'tish
 

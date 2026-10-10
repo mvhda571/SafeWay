@@ -91,7 +91,7 @@ function ReportForm({ onDone }: { onDone: () => void }) {
 
   function pickFile(f: File | undefined) {
     if (!f) return;
-    if (!/^image\/(jpeg|png|webp)$/.test(f.type) || f.size > 5 * 1024 * 1024) {
+    if (!/^image\/(jpeg|png|webp)$/.test(f.type) || f.size > 4.5 * 1024 * 1024) {
       setError(t("report.photoHint"));
       return;
     }

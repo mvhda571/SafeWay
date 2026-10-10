@@ -3,17 +3,15 @@ import { cookies } from "next/headers";
 import { unstable_rethrow } from "next/navigation";
 import { SignJWT, jwtVerify } from "jose";
 import type { Role, Session, User } from "./types";
-import { isAdmin } from "./types";
+import { isAdmin, SESSION_COOKIE } from "./types";
+import { getAuthSecret } from "./store";
 
-export const SESSION_COOKIE = "sw_session";
+export { SESSION_COOKIE };
 const MAX_AGE = 60 * 60 * 24 * 7;
 
-function secret() {
-  const s = process.env.AUTH_SECRET;
-  if (!s && process.env.NODE_ENV === "production") {
-    throw new Error("AUTH_SECRET must be set in production");
-  }
-  return new TextEncoder().encode(s ?? "safeway-dev-secret-change-me");
+/** AUTH_SECRET if configured, otherwise a random secret generated once and kept in the database. */
+async function secret() {
+  return new TextEncoder().encode(process.env.AUTH_SECRET || (await getAuthSecret()));
 }
 
 export async function createSession(user: User) {
@@ -22,7 +20,7 @@ export async function createSession(user: User) {
     .setSubject(user.id)
     .setIssuedAt()
     .setExpirationTime(`${MAX_AGE}s`)
-    .sign(secret());
+    .sign(await secret());
   (await cookies()).set(SESSION_COOKIE, token, {
     httpOnly: true,
     sameSite: "lax",
@@ -39,7 +37,7 @@ export async function destroySession() {
 export async function verifyToken(token: string | undefined): Promise<Session | null> {
   if (!token) return null;
   try {
-    const { payload } = await jwtVerify(token, secret());
+    const { payload } = await jwtVerify(token, await secret());
     return {
       sub: payload.sub as string,
       name: payload.name as string,

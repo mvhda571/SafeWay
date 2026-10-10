@@ -1,4 +1,6 @@
-export type Role = "parent" | "school_admin" | "super_admin";
+export const SESSION_COOKIE = "sw_session";
+
+export type Role ="parent" | "school_admin" | "super_admin";
 
 export type Category = "open_manhole" | "unlit_street" | "stray_dogs" | "speeding";
 export type Severity = "low" | "medium" | "high";

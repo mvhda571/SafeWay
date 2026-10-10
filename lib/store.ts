@@ -1,12 +1,11 @@
 import "server-only";
-import { promises as fs } from "fs";
-import path from "path";
-import { randomUUID } from "crypto";
+import { randomBytes, randomUUID } from "crypto";
 import bcrypt from "bcryptjs";
 import type { Hazard, TelegramLog, User } from "./types";
+import { storage, type DBVersion } from "./storage";
 
 /**
- * Lightweight JSON-file database so the app runs with zero setup.
+ * Lightweight JSON database so the app runs with zero setup (./data locally, Netlify Blobs on Netlify).
  * Every function here has a 1:1 counterpart in the Prisma/PostGIS schema
  * (see prisma/schema.prisma) — swap this module to move to PostgreSQL.
  */
@@ -15,12 +14,12 @@ interface DB {
   users: User[];
   hazards: Hazard[];
   telegram: TelegramLog[];
+  /** Generated once; used to sign sessions when AUTH_SECRET is not configured. */
+  authSecret?: string;
 }
 
-const DATA_DIR = path.join(/*turbopackIgnore: true*/ process.cwd(), "data");
-const DB_FILE = path.join(DATA_DIR, "db.json");
-export const UPLOAD_DIR = path.join(DATA_DIR, "uploads");
-
+// In-process cache is only safe with a single long-lived server (local fs). Serverless instances
+// on Netlify each have their own memory, so there we always read the latest copy.
 let cache: DB | null = null;
 let queue: Promise<unknown> = Promise.resolve();
 
@@ -67,38 +66,64 @@ function seed(): DB {
     createdAt: daysAgo(d, i),
     updatedAt: daysAgo(d, i),
   }));
-  return { users, hazards, telegram: [] };
+  return { users, hazards, telegram: [], authSecret: randomBytes(32).toString("hex") };
+}
+
+/** Reads the DB (seeding it on first use) together with the version tag needed for a safe write. */
+async function read(): Promise<{ db: DB; version: DBVersion }> {
+  const s = storage();
+  if (s.kind === "fs" && cache) return { db: cache, version: { exists: true } };
+  for (let attempt = 0; attempt < 5; attempt++) {
+    const { text, ...version } = await s.readDB();
+    if (text !== null) {
+      const db = JSON.parse(text) as DB;
+      if (s.kind === "fs") cache = db;
+      return { db, version };
+    }
+    // Empty store: seed it. onlyIfNew means a concurrent seeder wins and we re-read theirs.
+    const fresh = seed();
+    if (await s.writeDB(JSON.stringify(fresh))) {
+      if (s.kind === "fs") cache = fresh;
+      continue; // re-read to obtain the ETag
+    }
+  }
+  throw new Error("Could not initialise database");
 }
 
 async function load(): Promise<DB> {
-  if (cache) return cache;
-  try {
-    cache = JSON.parse(await fs.readFile(DB_FILE, "utf8")) as DB;
-  } catch {
-    cache = seed();
-    await persist(cache);
-  }
-  return cache;
+  return (await read()).db;
 }
 
-async function persist(db: DB) {
-  await fs.mkdir(DATA_DIR, { recursive: true });
-  const tmp = DB_FILE + ".tmp";
-  await fs.writeFile(tmp, JSON.stringify(db, null, 2));
-  await fs.rename(tmp, DB_FILE);
-}
-
-/** Serialises writes so concurrent requests can't clobber each other. */
+/**
+ * Applies `fn` to a copy of the DB and saves it. The copy is only adopted after the write succeeds,
+ * so a failed write never leaves half-applied changes in memory. On Netlify a concurrent write from
+ * another instance makes the conditional write fail, and we retry on the fresh data.
+ */
 function mutate<T>(fn: (db: DB) => T | Promise<T>): Promise<T> {
   const run = queue.then(async () => {
-    const db = await load();
-    const result = await fn(db);
-    await persist(db);
-    return result;
+    for (let attempt = 0; attempt < 5; attempt++) {
+      const { db, version } = await read();
+      const draft = structuredClone(db);
+      const result = await fn(draft);
+      if (await storage().writeDB(JSON.stringify(draft), version)) {
+        if (storage().kind === "fs") cache = draft;
+        return result;
+      }
+    }
+    throw new Error("Database is busy, please retry");
   });
   queue = run.catch(() => undefined);
   return run;
 }
+
+export async function getAuthSecret(): Promise<string> {
+  const db = await load();
+  if (db.authSecret) return db.authSecret;
+  return mutate((d) => (d.authSecret ??= randomBytes(32).toString("hex")));
+}
+
+export const putUpload = (name: string, data: ArrayBuffer) => storage().putFile(name, data);
+export const getUpload = (name: string) => storage().getFile(name);
 
 // ---------- users ----------
 export async function findUserByEmail(email: string) {
