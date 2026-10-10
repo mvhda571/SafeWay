@@ -90,7 +90,7 @@ export async function handle(fn: () => Promise<Response>): Promise<Response> {
     }
     // Only real connection problems are "database unavailable" — not every Mongo error.
     const db = e instanceof Error &&
-      (/^Mongo(ServerSelection|Network|NetworkTimeout)Error$/.test(e.name) || /MONGODB_URI|ECONNREFUSED|querySrv|ENOTFOUND/.test(e.message));
+      (/^Mongo(ose)?(ServerSelection|Network|NetworkTimeout)Error$/.test(e.name) || /MONGODB_URI|ECONNREFUSED|querySrv|ENOTFOUND/.test(e.message));
     return Response.json(
       { error: db ? "Database unavailable" : "Internal error", code: db ? "db_unavailable" : "internal" },
       { status: db ? 503 : 500 },
