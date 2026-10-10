@@ -105,7 +105,7 @@ export function Landing() {
       <section className="pb-16">
         <div className="mb-6 flex items-center justify-between">
           <h2 className="flex items-center gap-2 text-2xl font-extrabold"><Users className="size-6 text-emerald-500" />{t("recent.title")}</h2>
-          <Link href="/map" className="inline-flex items-center gap-1 text-sm font-semibold text-emerald-600">{t("nav.map")} <ArrowRight className="size-4" /></Link>
+          <Link href="/map" className="inline-flex min-h-11 items-center gap-1 text-sm font-semibold text-emerald-600 md:min-h-0">{t("nav.map")} <ArrowRight className="size-4" /></Link>
         </div>
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {hazards.slice(0, 6).map((h, i) => <HazardCard key={h.id} hazard={h} index={i} />)}

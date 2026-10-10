@@ -37,6 +37,12 @@ yarn-error.log*
 # local JSON database + uploaded photos
 /data/
 
+# Telegram bot (Python) — bot/.env is already covered by .env* above
+__pycache__/
+*.py[cod]
+/bot/.venv/
+/bot/venv/
+
 # vercel
 .vercel
 

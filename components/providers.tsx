@@ -5,7 +5,7 @@ import { AnimatePresence, motion } from "framer-motion";
 import { CheckCircle2, AlertTriangle } from "lucide-react";
 import { dictionaries, LOCALES, type Locale, type TKey } from "@/lib/i18n";
 import type { HazardDTO, Role } from "@/lib/types";
-import { api } from "@/lib/utils";
+import { api, ApiError } from "@/lib/utils";
 
 // ---------------- i18n ----------------
 type TFn = (key: TKey, vars?: Record<string, string | number>) => string;
@@ -168,6 +168,15 @@ export function Providers({ children }: { children: React.ReactNode }) {
       </AuthCtx.Provider>
     </I18nCtx.Provider>
   );
+}
+
+/** Translates an error thrown by `api()` using its `code` (`err.<code>` keys), with a generic fallback. */
+export function useErrText() {
+  const { t } = useI18n();
+  return useCallback((e: unknown) => {
+    const key = `err.${e instanceof ApiError ? e.code : ""}`;
+    return key in dictionaries.uz ? t(key as TKey) : t("common.error");
+  }, [t]);
 }
 
 export function useTimeAgo() {

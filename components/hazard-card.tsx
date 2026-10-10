@@ -1,12 +1,13 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { motion } from "framer-motion";
-import { MapPin, ThumbsUp, Users } from "lucide-react";
+import { ChevronRight, MapPin, ThumbsUp, Users } from "lucide-react";
 import type { HazardDTO } from "@/lib/types";
-import { api, cn } from "@/lib/utils";
+import { api, ApiError, cn } from "@/lib/utils";
 import { formatDistance } from "@/lib/geo";
-import { useAuth, useHazards, useI18n, useTimeAgo, useUi } from "./providers";
+import { useAuth, useErrText, useHazards, useI18n, useTimeAgo, useUi } from "./providers";
 import { CategoryChip, SeverityBadge, StatusBadge } from "./ui";
 
 export function ConfirmButton({ hazard, compact }: { hazard: HazardDTO; compact?: boolean }) {
@@ -14,20 +15,26 @@ export function ConfirmButton({ hazard, compact }: { hazard: HazardDTO; compact?
   const { user } = useAuth();
   const { upsert } = useHazards();
   const { toast } = useUi();
+  const errText = useErrText();
   const [busy, setBusy] = useState(false);
+  const resolved = hazard.status === "resolved";
 
+  /** One vote per user: the server rejects repeats with 409, so there is no un-vote. */
   async function onClick(e: React.MouseEvent) {
     e.stopPropagation();
     if (!user) return toast(t("card.loginToVote"), "err");
+    if (hazard.confirmedByMe || resolved) return;
     setBusy(true);
-    // Optimistic update
-    upsert({ ...hazard, confirmedByMe: !hazard.confirmedByMe, confirmCount: hazard.confirmCount + (hazard.confirmedByMe ? -1 : 1) });
+    // Optimistic update: the count changes immediately.
+    upsert({ ...hazard, confirmedByMe: true, confirmCount: hazard.confirmCount + 1 });
     try {
       const d = await api<{ hazard: HazardDTO }>(`/api/hazards/${hazard.id}/confirm`, { method: "POST" });
       upsert(d.hazard);
-    } catch {
-      upsert(hazard);
-      toast(t("common.error"), "err");
+    } catch (err) {
+      // On 409 the server sends back the real state of the hazard.
+      const server = err instanceof ApiError ? (err.data.hazard as HazardDTO | undefined) : undefined;
+      upsert(server ?? hazard);
+      toast(errText(err), "err");
     } finally {
       setBusy(false);
     }
@@ -37,10 +44,12 @@ export function ConfirmButton({ hazard, compact }: { hazard: HazardDTO; compact?
     <motion.button
       whileTap={{ scale: 0.92 }}
       onClick={onClick}
-      disabled={busy || hazard.status === "resolved"}
+      disabled={busy || resolved || hazard.confirmedByMe}
+      aria-pressed={hazard.confirmedByMe}
       className={cn(
-        "inline-flex items-center gap-1.5 rounded-xl font-semibold transition disabled:opacity-50",
-        compact ? "h-8 px-2.5 text-xs" : "h-9 px-3 text-sm",
+        "inline-flex items-center gap-1.5 rounded-xl font-semibold transition disabled:cursor-not-allowed",
+        resolved && "opacity-50",
+        compact ? "h-11 px-3 text-xs md:h-8 md:px-2.5" : "h-11 px-3 text-sm md:h-9",
         hazard.confirmedByMe
           ? "bg-emerald-500 text-white shadow-md shadow-emerald-500/30"
           : "bg-zinc-900/5 text-zinc-800 hover:bg-zinc-900/10 dark:bg-white/10 dark:text-zinc-100 dark:hover:bg-white/15",
@@ -95,7 +104,13 @@ export function HazardCard({
         </div>
         <div className="flex items-center justify-between gap-2">
           <CategoryChip category={hazard.category} />
-          <span className="text-[11px] text-zinc-400">{ago(hazard.createdAt)}</span>
+          <span className="flex items-center gap-2 text-[11px] text-zinc-400">
+            {ago(hazard.createdAt)}
+            <Link href={`/hazards/${hazard.id}`} onClick={(e) => e.stopPropagation()}
+              className="-my-3 inline-flex min-h-11 items-center font-semibold text-emerald-600 hover:underline dark:text-emerald-400 md:my-0 md:min-h-0">
+              {t("card.details")}<ChevronRight className="size-3" />
+            </Link>
+          </span>
         </div>
         <div className="flex items-center justify-between gap-2 border-t border-zinc-900/5 pt-2.5 dark:border-white/5">
           <span className="inline-flex items-center gap-1 text-xs text-zinc-500">
@@ -125,7 +140,12 @@ export function HazardPopup({ hazard }: { hazard: HazardDTO }) {
       <p className="!m-0 text-sm font-semibold leading-snug">{hazard.title}</p>
       {hazard.description && <p className="!m-0 text-xs text-zinc-500">{hazard.description}</p>}
       <p className="!m-0 text-[11px] text-zinc-400">{t("card.by")}: {hazard.authorName} · {ago(hazard.createdAt)}</p>
-      <ConfirmButton hazard={hazard} compact />
+      <div className="flex items-center justify-between gap-2">
+        <ConfirmButton hazard={hazard} compact />
+        <Link href={`/hazards/${hazard.id}`} className="inline-flex min-h-11 items-center text-xs font-semibold !text-emerald-600 hover:underline md:min-h-0">
+          {t("card.details")}<ChevronRight className="size-3" />
+        </Link>
+      </div>
     </div>
   );
 }

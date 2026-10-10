@@ -5,7 +5,7 @@ import { CATEGORIES, STATUSES, SEVERITIES } from "@/lib/types";
 export async function GET() {
   return handle(async () => {
     await requireAdmin();
-    const hazards = await listHazards();
+    const [hazards, telegram] = await Promise.all([listHazards(), listTelegram()]);
     const total = hazards.length;
     const resolved = hazards.filter((h) => h.status === "resolved").length;
 
@@ -30,7 +30,7 @@ export async function GET() {
       byCategory,
       bySeverity,
       daily,
-      telegram: await listTelegram(),
+      telegram,
     });
   });
 }

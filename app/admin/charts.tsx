@@ -1,23 +1,10 @@
 "use client";
 
-import { useEffect, useState } from "react";
 import { Area, AreaChart, Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
-import type { Status } from "@/lib/types";
+import { SEVERITY_COLOR, type Severity, type Status } from "@/lib/types";
 import { STATUS_ICON } from "@/components/ui";
 import { useI18n } from "@/components/providers";
-
-function useIsDark() {
-  const [dark, setDark] = useState(false);
-  useEffect(() => {
-    const el = document.documentElement;
-    const update = () => setDark(el.classList.contains("dark"));
-    update();
-    const mo = new MutationObserver(update);
-    mo.observe(el, { attributes: true, attributeFilter: ["class"] });
-    return () => mo.disconnect();
-  }, []);
-  return dark;
-}
+import { useIsDark } from "@/components/theme";
 
 function chrome(dark: boolean) {
   return {
@@ -111,6 +98,36 @@ export function StatusStack({ data }: { data: { key: Status; count: number }[] }
             </li>
           );
         })}
+      </ul>
+    </div>
+  );
+}
+
+/** Severity share — same layout as StatusStack, colour dot + label for every row. */
+export function SeverityStack({ data }: { data: { key: Severity; count: number }[] }) {
+  const { t } = useI18n();
+  const total = data.reduce((s, d) => s + d.count, 0) || 1;
+  return (
+    <div className="space-y-4">
+      <div className="flex h-4 gap-0.5 overflow-hidden rounded-full">
+        {data.filter((d) => d.count > 0).map((d) => (
+          <div
+            key={d.key}
+            title={`${t(`sev.${d.key}`)}: ${d.count}`}
+            className="h-full transition-all first:rounded-l-full last:rounded-r-full hover:brightness-110"
+            style={{ width: `${(d.count / total) * 100}%`, background: SEVERITY_COLOR[d.key] }}
+          />
+        ))}
+      </div>
+      <ul className="space-y-2">
+        {data.map((d) => (
+          <li key={d.key} className="flex items-center gap-2 text-sm">
+            <span className="size-3.5 rounded-full" style={{ background: SEVERITY_COLOR[d.key] }} />
+            <span className="flex-1">{t(`sev.${d.key}`)}</span>
+            <span className="font-bold tabular-nums">{d.count}</span>
+            <span className="w-10 text-right text-xs tabular-nums text-zinc-500">{Math.round((d.count / total) * 100)}%</span>
+          </li>
+        ))}
       </ul>
     </div>
   );

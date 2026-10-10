@@ -1,207 +1,247 @@
 import "server-only";
-import { randomBytes, randomUUID } from "crypto";
-import bcrypt from "bcryptjs";
-import type { Hazard, TelegramLog, User } from "./types";
-import { storage, type DBVersion } from "./storage";
+import { randomBytes } from "crypto";
+import { isValidObjectId, Types } from "mongoose";
+import type { Category, Hazard, ProfileStats, SavedPlace, Status, TelegramLog, User } from "./types";
+import { connectDB, HazardImageModel, HazardModel, ImageModel, MetaModel, TelegramModel, UserModel } from "./db";
 
 /**
- * Lightweight JSON database so the app runs with zero setup (./data locally, Netlify Blobs on Netlify).
- * Every function here has a 1:1 counterpart in the Prisma/PostGIS schema
- * (see prisma/schema.prisma) — swap this module to move to PostgreSQL.
+ * Data access layer on MongoDB. Every function returns plain objects with string `id`s and ISO dates,
+ * so route handlers and the API response shape don't depend on Mongoose.
  */
 
-interface DB {
-  users: User[];
-  hazards: Hazard[];
-  telegram: TelegramLog[];
-  /** Generated once; used to sign sessions when AUTH_SECRET is not configured. */
-  authSecret?: string;
+type Doc = Record<string, unknown> & { _id: { toString(): string } };
+const iso = (d: unknown) => (d instanceof Date ? d.toISOString() : String(d ?? ""));
+
+function toUser(d: Doc): User {
+  return {
+    id: d._id.toString(),
+    name: d.name as string,
+    email: d.email as string,
+    passwordHash: d.passwordHash as string,
+    role: d.role as User["role"],
+    createdAt: iso(d.createdAt),
+    lang: (d.lang as User["lang"]) ?? null,
+    home: (d.home as SavedPlace | null) ?? null,
+    school: (d.school as SavedPlace | null) ?? null,
+  };
 }
 
-// In-process cache is only safe with a single long-lived server (local fs). Serverless instances
-// on Netlify each have their own memory, so there we always read the latest copy.
-let cache: DB | null = null;
-let queue: Promise<unknown> = Promise.resolve();
+const CATEGORY_TITLE: Record<Category, string> = {
+  open_manhole: "Ochiq lyuk",
+  unlit_street: "Yoritilmagan ko'cha",
+  stray_dogs: "Qarovsiz itlar",
+  speeding: "Tezkor haydovchilar",
+};
 
-function daysAgo(d: number, h = 0) {
-  return new Date(Date.now() - d * 86400000 - h * 3600000).toISOString();
+/** Normalises site and bot documents (bot ones only have `location`, `voters`, `hasImage`, `reporterTgId`). */
+function toHazard(d: Doc): Hazard {
+  const id = d._id.toString();
+  const coords = (d.location as { coordinates?: [number, number] } | undefined)?.coordinates;
+  return {
+    id,
+    title: (d.title as string) || CATEGORY_TITLE[d.category as Category] || "SafeWay",
+    description: (d.description as string) ?? "",
+    category: d.category as Hazard["category"],
+    severity: d.severity as Hazard["severity"],
+    status: d.status as Status,
+    lat: (d.lat as number | undefined) ?? coords?.[1] ?? 0,
+    lng: (d.lng as number | undefined) ?? coords?.[0] ?? 0,
+    address: (d.address as string | null) ?? null,
+    // Bot photos are served by the same route, looked up by hazard id.
+    imageUrl: (d.imageUrl as string | null) ?? (d.hasImage ? `/api/uploads/${id}` : null),
+    confirmations: (d.voters as string[]) ?? [],
+    statusHistory: ((d.statusHistory as { status: Status; at: Date }[]) ?? []).map((s) => ({ status: s.status, at: iso(s.at) })),
+    createdBy: (d.createdBy as string | undefined) ?? (d.reporterTgId ? `tg:${d.reporterTgId}` : ""),
+    createdAt: iso(d.createdAt),
+    updatedAt: iso(d.updatedAt),
+  };
 }
 
-function seed(): DB {
-  const now = new Date().toISOString();
-  const users: User[] = [
-    { id: "u-admin", name: "Super Admin", email: "admin@safeway.uz", passwordHash: bcrypt.hashSync("admin123", 10), role: "super_admin", createdAt: now },
-    { id: "u-school", name: "Maktab №110 inspektori", email: "school@safeway.uz", passwordHash: bcrypt.hashSync("school123", 10), role: "school_admin", createdAt: now },
-    { id: "u-parent", name: "Dilnoza Karimova", email: "parent@safeway.uz", passwordHash: bcrypt.hashSync("parent123", 10), role: "parent", createdAt: now },
-  ];
-  type S = [string, string, Hazard["category"], Hazard["severity"], Hazard["status"], number, number, number, number];
-  const rows: S[] = [
-    ["Ochiq lyuk — Bunyodkor shoh ko'chasi", "Piyodalar yo'lagida qopqog'i yo'q lyuk, kechasi ko'rinmaydi.", "open_manhole", "medium", "active", 41.2856, 69.2041, 1, 7],
-    ["Yoritilmagan ko'cha — Qatortol", "Maktabga boradigan yo'lda 300 m davomida chiroqlar yonmaydi.", "unlit_street", "low", "active", 41.2925, 69.2133, 2, 4],
-    ["Tezkor haydovchilar — Chilonzor 9-kvartal", "Maktab oldida svetofor yo'q, mashinalar 80+ km/soat tezlikda yuradi.", "speeding", "high", "active", 41.2789, 69.1978, 0, 12],
-    ["Qarovsiz itlar — Novza bekati", "Ertalab 5-6 ta it to'dasi bolalarga tashlanmoqda.", "stray_dogs", "medium", "investigating", 41.2903, 69.2245, 3, 9],
-    ["Ochiq lyuk — Amir Temur xiyoboni yonida", "Ta'mirlash ishlaridan keyin lyuk ochiq qolgan.", "open_manhole", "high", "active", 41.3115, 69.2795, 0, 15],
-    ["Yoritilmagan bog' yo'lagi — Yunusobod 4", "Bog' ichidagi yo'lak butunlay qorong'i.", "unlit_street", "low", "resolved", 41.3652, 69.2867, 9, 3],
-    ["Tezkor haydovchilar — Amir Temur shoh ko'chasi", "Piyodalar o'tish joyida mashinalar to'xtamaydi.", "speeding", "high", "investigating", 41.3401, 69.2849, 1, 21],
-    ["Qarovsiz itlar — Mirzo Ulug'bek tumani", "Maktab hovlisi atrofida itlar ko'paygan.", "stray_dogs", "medium", "active", 41.3291, 69.3352, 4, 6],
-    ["Ochiq lyuk — Sergeli 6", "Ariq ustidagi panjara singan.", "open_manhole", "medium", "resolved", 41.2265, 69.2201, 12, 5],
-    ["Yoritilmagan ko'cha — Olmazor", "Maktab ortidagi ko'chada chiroqlar o'g'irlangan.", "unlit_street", "low", "active", 41.3466, 69.2101, 5, 2],
-    ["Tezkor haydovchilar — Farg'ona yo'li", "Katta yo'lni kesib o'tishda yer osti o'tish joyi yo'q.", "speeding", "high", "active", 41.2934, 69.3248, 2, 17],
-    ["Qarovsiz itlar — Shayxontohur", "Bozor yonida itlar to'dasi.", "stray_dogs", "low", "resolved", 41.3254, 69.2361, 15, 4],
-    ["Ochiq lyuk — Yakkasaroy", "Trotuar o'rtasida chuqur, to'siq qo'yilmagan.", "open_manhole", "high", "active", 41.2951, 69.2632, 0, 8],
-    ["Yoritilmagan ko'cha — Mirobod", "Temir yo'l ko'prigi ostida yoritish yo'q.", "unlit_street", "medium", "investigating", 41.2988, 69.2885, 6, 5],
-  ];
-  const hazards: Hazard[] = rows.map(([title, description, category, severity, status, lat, lng, d, votes], i) => ({
-    id: `h-${i + 1}`,
-    title,
-    description,
-    category,
-    severity,
-    status,
-    lat,
-    lng,
-    imageUrl: null,
-    confirmations: Array.from({ length: votes }, (_, k) => `seed-${i}-${k}`),
-    createdBy: i % 3 === 0 ? "u-school" : "u-parent",
-    createdAt: daysAgo(d, i),
-    updatedAt: daysAgo(d, i),
-  }));
-  return { users, hazards, telegram: [], authSecret: randomBytes(32).toString("hex") };
-}
-
-/** Reads the DB (seeding it on first use) together with the version tag needed for a safe write. */
-async function read(): Promise<{ db: DB; version: DBVersion }> {
-  const s = storage();
-  if (s.kind === "fs" && cache) return { db: cache, version: { exists: true } };
-  for (let attempt = 0; attempt < 5; attempt++) {
-    const { text, ...version } = await s.readDB();
-    if (text !== null) {
-      const db = JSON.parse(text) as DB;
-      if (s.kind === "fs") cache = db;
-      return { db, version };
-    }
-    // Empty store: seed it. onlyIfNew means a concurrent seeder wins and we re-read theirs.
-    const fresh = seed();
-    if (await s.writeDB(JSON.stringify(fresh))) {
-      if (s.kind === "fs") cache = fresh;
-      continue; // re-read to obtain the ETag
-    }
-  }
-  throw new Error("Could not initialise database");
-}
-
-async function load(): Promise<DB> {
-  return (await read()).db;
-}
-
-/**
- * Applies `fn` to a copy of the DB and saves it. The copy is only adopted after the write succeeds,
- * so a failed write never leaves half-applied changes in memory. On Netlify a concurrent write from
- * another instance makes the conditional write fail, and we retry on the fresh data.
- */
-function mutate<T>(fn: (db: DB) => T | Promise<T>): Promise<T> {
-  const run = queue.then(async () => {
-    for (let attempt = 0; attempt < 5; attempt++) {
-      const { db, version } = await read();
-      const draft = structuredClone(db);
-      const result = await fn(draft);
-      if (await storage().writeDB(JSON.stringify(draft), version)) {
-        if (storage().kind === "fs") cache = draft;
-        return result;
-      }
-    }
-    throw new Error("Database is busy, please retry");
-  });
-  queue = run.catch(() => undefined);
-  return run;
+function toTelegram(d: Doc): TelegramLog {
+  return {
+    id: d._id.toString(),
+    hazardId: d.hazardId as string,
+    text: d.text as string,
+    delivered: !!d.delivered,
+    error: (d.error as string | null) ?? null,
+    createdAt: iso(d.createdAt),
+  };
 }
 
 export async function getAuthSecret(): Promise<string> {
-  const db = await load();
-  if (db.authSecret) return db.authSecret;
-  return mutate((d) => (d.authSecret ??= randomBytes(32).toString("hex")));
+  await connectDB();
+  // Atomic upsert: concurrent cold starts all end up with the same secret.
+  const doc = await MetaModel.findOneAndUpdate(
+    { _id: "authSecret" },
+    { $setOnInsert: { value: randomBytes(32).toString("hex") } },
+    { upsert: true, new: true, lean: true },
+  );
+  return (doc as unknown as { value: string }).value;
 }
 
-export const putUpload = (name: string, data: ArrayBuffer) => storage().putFile(name, data);
-export const getUpload = (name: string) => storage().getFile(name);
+// ---------- images (stored in MongoDB) ----------
+export async function putUpload(data: Buffer, contentType: string, createdBy: string) {
+  await connectDB();
+  const doc = await ImageModel.create({ data, contentType, createdBy });
+  return doc._id.toString() as string;
+}
+
+export async function getUpload(id: string) {
+  if (!isValidObjectId(id)) return null;
+  await connectDB();
+  type Img = { data: { buffer: ArrayBuffer } | Buffer; contentType?: string; mime?: string };
+  // A site upload by image id, otherwise a bot photo by hazard id.
+  const doc = ((await ImageModel.findById(id).lean()) ??
+    (await HazardImageModel.findOne({ hazardId: new Types.ObjectId(id) }).lean())) as Img | null;
+  if (!doc) return null;
+  // lean() returns a BSON Binary; normalise to a Node Buffer.
+  const data = Buffer.isBuffer(doc.data) ? doc.data : Buffer.from((doc.data as { buffer: ArrayBuffer }).buffer);
+  return { data, contentType: doc.contentType ?? doc.mime ?? "image/jpeg" };
+}
 
 // ---------- users ----------
 export async function findUserByEmail(email: string) {
-  return (await load()).users.find((u) => u.email.toLowerCase() === email.toLowerCase()) ?? null;
+  await connectDB();
+  const d = await UserModel.findOne({ email: email.trim().toLowerCase() }).lean();
+  return d ? toUser(d as Doc) : null;
 }
 
 export async function findUserById(id: string) {
-  return (await load()).users.find((u) => u.id === id) ?? null;
+  if (!isValidObjectId(id)) return null;
+  await connectDB();
+  const d = await UserModel.findById(id).lean();
+  return d ? toUser(d as Doc) : null;
 }
 
-export function createUser(data: Pick<User, "name" | "email" | "passwordHash" | "role">) {
-  return mutate((db) => {
-    const user: User = { ...data, id: randomUUID(), createdAt: new Date().toISOString() };
-    db.users.push(user);
-    return user;
-  });
+export async function createUser(data: Pick<User, "name" | "email" | "passwordHash" | "role">) {
+  await connectDB();
+  const d = await UserModel.create(data);
+  return toUser(d.toObject() as Doc);
+}
+
+export async function updateUserPrefs(id: string, patch: Partial<Pick<User, "lang" | "home" | "school">>) {
+  if (!isValidObjectId(id)) return null;
+  await connectDB();
+  const d = await UserModel.findByIdAndUpdate(id, { $set: patch }, { new: true, lean: true });
+  return d ? toUser(d as Doc) : null;
+}
+
+/** Hazards the user reported, plus how many other hazards they confirmed with "+1". */
+export async function userActivity(userId: string): Promise<{ stats: ProfileStats; hazards: Hazard[] }> {
+  await connectDB();
+  const [mine, confirmed] = await Promise.all([
+    HazardModel.find({ createdBy: userId }).sort({ createdAt: -1 }).lean(),
+    HazardModel.countDocuments({ voters: userId, createdBy: { $ne: userId } }),
+  ]);
+  const hazards = (mine as Doc[]).map(toHazard);
+  return {
+    stats: { reported: hazards.length, resolved: hazards.filter((h) => h.status === "resolved").length, confirmed },
+    hazards,
+  };
+}
+
+export async function userNames(ids: string[]) {
+  await connectDB();
+  const valid = [...new Set(ids)].filter((id) => isValidObjectId(id));
+  const users = (await UserModel.find({ _id: { $in: valid } }, { name: 1 }).lean()) as Doc[];
+  return new Map(users.map((u) => [u._id.toString(), u.name as string]));
 }
 
 // ---------- hazards ----------
-export async function listHazards() {
-  return [...(await load()).hazards].sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+export async function listHazards(filter: { category?: string; status?: string; near?: { lat: number; lng: number; radius: number } } = {}) {
+  await connectDB();
+  const q: Record<string, unknown> = {};
+  if (filter.category) q.category = filter.category;
+  if (filter.status) q.status = filter.status;
+  if (filter.near) {
+    q.location = { $geoWithin: { $centerSphere: [[filter.near.lng, filter.near.lat], filter.near.radius / 6378100] } };
+  }
+  const docs = (await HazardModel.find(q).sort({ createdAt: -1 }).lean()) as Doc[];
+  return docs.map(toHazard);
 }
 
 export async function getHazard(id: string) {
-  return (await load()).hazards.find((h) => h.id === id) ?? null;
+  if (!isValidObjectId(id)) return null;
+  await connectDB();
+  const d = await HazardModel.findById(id).lean();
+  return d ? toHazard(d as Doc) : null;
 }
 
-export async function userNames() {
-  return new Map((await load()).users.map((u) => [u.id, u.name]));
+export async function countRecentHazards(userId: string, sinceMs: number) {
+  await connectDB();
+  return HazardModel.countDocuments({ createdBy: userId, createdAt: { $gte: new Date(Date.now() - sinceMs) } });
 }
 
-export function createHazard(data: Omit<Hazard, "id" | "createdAt" | "updatedAt" | "confirmations" | "status">) {
-  return mutate((db) => {
-    const now = new Date().toISOString();
-    const hazard: Hazard = { ...data, id: randomUUID(), status: "active", confirmations: [data.createdBy], createdAt: now, updatedAt: now };
-    db.hazards.push(hazard);
-    return hazard;
+export async function createHazard(data: Omit<Hazard, "id" | "createdAt" | "updatedAt" | "confirmations" | "status" | "statusHistory">) {
+  await connectDB();
+  const d = await HazardModel.create({
+    ...data,
+    location: { type: "Point", coordinates: [data.lng, data.lat] },
+    status: "active",
+    voters: [data.createdBy],
+    upvotes: 1,
+    hasImage: false,
+    source: "web",
+    statusHistory: [{ status: "active", at: new Date() }],
   });
+  return toHazard(d.toObject() as Doc);
 }
 
-export function updateHazard(id: string, patch: Partial<Pick<Hazard, "status" | "severity" | "category" | "title" | "description">>) {
-  return mutate((db) => {
-    const h = db.hazards.find((x) => x.id === id);
-    if (!h) return null;
-    Object.assign(h, patch, { updatedAt: new Date().toISOString() });
-    return h;
-  });
+export async function updateHazard(id: string, patch: Partial<Pick<Hazard, "status" | "severity" | "category" | "title" | "description">>) {
+  if (!isValidObjectId(id)) return null;
+  await connectDB();
+  // resolvedAt mirrors what the bot writes when it changes a status.
+  const update: Record<string, unknown> = {
+    $set: patch.status ? { ...patch, resolvedAt: patch.status === "resolved" ? new Date() : null } : patch,
+  };
+  if (patch.status) {
+    // Only log a history entry when the status actually changes.
+    const current = (await HazardModel.findById(id, { status: 1 }).lean()) as { status: Status } | null;
+    if (!current) return null;
+    if (current.status !== patch.status) update.$push = { statusHistory: { status: patch.status, at: new Date() } };
+  }
+  const d = await HazardModel.findByIdAndUpdate(id, update, { new: true, lean: true });
+  return d ? toHazard(d as Doc) : null;
 }
 
-export function deleteHazard(id: string) {
-  return mutate((db) => {
-    const before = db.hazards.length;
-    db.hazards = db.hazards.filter((h) => h.id !== id);
-    return db.hazards.length < before;
-  });
+export async function deleteHazard(id: string) {
+  if (!isValidObjectId(id)) return false;
+  await connectDB();
+  const d = (await HazardModel.findByIdAndDelete(id).lean()) as { imageUrl?: string | null } | null;
+  if (!d) return false;
+  await HazardImageModel.deleteMany({ hazardId: new Types.ObjectId(id) }).catch(() => undefined);
+  const imageId = d.imageUrl?.split("/").pop();
+  if (imageId && isValidObjectId(imageId)) await ImageModel.deleteOne({ _id: imageId }).catch(() => undefined);
+  return true;
 }
 
-/** Toggles the user's "+1 I saw it too" vote. */
-export function toggleConfirm(id: string, userId: string) {
-  return mutate((db) => {
-    const h = db.hazards.find((x) => x.id === id);
-    if (!h) return null;
-    h.confirmations = h.confirmations.includes(userId)
-      ? h.confirmations.filter((u) => u !== userId)
-      : [...h.confirmations, userId];
-    return h;
-  });
+/**
+ * "+1 I saw it too". One vote per user, enforced atomically by the query itself
+ * (the update only matches when the user is not yet in `voters` and the hazard isn't resolved).
+ */
+export async function addConfirmation(id: string, userId: string): Promise<{ hazard: Hazard | null; result: "ok" | "already" | "resolved" | "missing" }> {
+  if (!isValidObjectId(id)) return { hazard: null, result: "missing" };
+  await connectDB();
+  const updated = await HazardModel.findOneAndUpdate(
+    { _id: id, status: { $ne: "resolved" }, voters: { $ne: userId } },
+    { $addToSet: { voters: userId }, $inc: { upvotes: 1 } },
+    { new: true, lean: true },
+  );
+  if (updated) return { hazard: toHazard(updated as Doc), result: "ok" };
+  const h = await getHazard(id);
+  if (!h) return { hazard: null, result: "missing" };
+  return { hazard: h, result: h.status === "resolved" ? "resolved" : "already" };
 }
 
 // ---------- telegram log ----------
 export async function listTelegram() {
-  return [...(await load()).telegram].sort((a, b) => b.createdAt.localeCompare(a.createdAt)).slice(0, 30);
+  await connectDB();
+  const docs = (await TelegramModel.find().sort({ createdAt: -1 }).limit(30).lean()) as Doc[];
+  return docs.map(toTelegram);
 }
 
-export function addTelegram(entry: Omit<TelegramLog, "id" | "createdAt">) {
-  return mutate((db) => {
-    const log: TelegramLog = { ...entry, id: randomUUID(), createdAt: new Date().toISOString() };
-    db.telegram.push(log);
-    return log;
-  });
+export async function addTelegram(entry: Omit<TelegramLog, "id" | "createdAt">) {
+  await connectDB();
+  const d = await TelegramModel.create(entry);
+  return toTelegram(d.toObject() as Doc);
 }

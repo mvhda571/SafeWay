@@ -4,19 +4,16 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { AnimatePresence, motion } from "framer-motion";
 import { Loader2, Lock, LogOut, Mail, Shield, User } from "lucide-react";
-import { useAuth, useI18n, useUi, type ClientUser } from "@/components/providers";
+import { useAuth, useErrText, useI18n, useUi, type ClientUser } from "@/components/providers";
 import { Button, Card, inputCls } from "@/components/ui";
-import { isAdmin } from "@/lib/types";
+import { isAdmin, type Role } from "@/lib/types";
 import { api, cn, jsonInit } from "@/lib/utils";
 
-const DEMO = [
-  { label: "Parent", email: "parent@safeway.uz", password: "parent123" },
-  { label: "School Admin", email: "school@safeway.uz", password: "school123" },
-  { label: "Super Admin", email: "admin@safeway.uz", password: "admin123" },
-];
+export interface DemoAccount { role: Role; email: string; password: string }
 
-export function AuthScreen() {
-  const { t } = useI18n();
+export function AuthScreen({ demo }: { demo: DemoAccount[] }) {
+  const { t, setLocale } = useI18n();
+  const errText = useErrText();
   const { user, setUser, logout } = useAuth();
   const { toast } = useUi();
   const router = useRouter();
@@ -34,11 +31,12 @@ export function AuthScreen() {
     try {
       const body = creds ?? (mode === "login" ? { email, password } : { name, email, password });
       const url = creds || mode === "login" ? "/api/auth/login" : "/api/auth/signup";
-      const d = await api<{ user: ClientUser }>(url, jsonInit("POST", body));
+      const d = await api<{ user: ClientUser; lang?: "uz" | "ru" | "en" | null }>(url, jsonInit("POST", body));
+      if (d.lang) setLocale(d.lang); // language saved in the profile
       setUser(d.user);
       router.push(isAdmin(d.user.role) ? "/admin" : "/map");
     } catch (err) {
-      setError(err instanceof Error ? err.message : t("common.error"));
+      setError(errText(err));
     } finally {
       setBusy(false);
     }
@@ -52,7 +50,7 @@ export function AuthScreen() {
           <div>
             <p className="text-lg font-bold">{user.name}</p>
             <p className="text-sm text-zinc-500">{user.email}</p>
-            <span className="mt-2 inline-block rounded-full bg-emerald-500/10 px-3 py-1 text-xs font-semibold text-emerald-700 dark:text-emerald-300">{user.role}</span>
+            <span className="mt-2 inline-block rounded-full bg-emerald-500/10 px-3 py-1 text-xs font-semibold text-emerald-700 dark:text-emerald-300">{t(`role.${user.role}`)}</span>
           </div>
           <Button variant="outline" className="w-full" onClick={async () => { await logout(); router.push("/"); }}>
             <LogOut className="size-4" /> {t("nav.logout")}
@@ -82,7 +80,7 @@ export function AuthScreen() {
               <button
                 key={m}
                 onClick={() => { setMode(m); setError(null); }}
-                className={cn("relative z-10 rounded-lg py-2 text-sm font-semibold transition", mode === m ? "text-zinc-900 dark:text-white" : "text-zinc-500")}
+                className={cn("relative z-10 min-h-11 rounded-lg py-2 text-sm font-semibold transition", mode === m ? "text-zinc-900 dark:text-white" : "text-zinc-500")}
               >
                 {mode === m && <motion.span layoutId="auth-tab" className="absolute inset-0 -z-10 rounded-lg bg-white shadow dark:bg-zinc-700" />}
                 {t(m === "login" ? "auth.login" : "auth.signup")}
@@ -121,21 +119,21 @@ export function AuthScreen() {
             </Button>
           </form>
 
-          <div className="rounded-xl bg-zinc-900/[0.03] p-3 dark:bg-white/5">
+          {demo.length > 0 && <div className="rounded-xl bg-zinc-900/[0.03] p-3 dark:bg-white/5">
             <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-zinc-500">{t("auth.demo")}</p>
             <div className="grid grid-cols-3 gap-1.5">
-              {DEMO.map((d) => (
+              {demo.map((d) => (
                 <button
                   key={d.email}
                   disabled={busy}
                   onClick={(e) => submit(e, d)}
                   className="rounded-lg border border-zinc-900/10 px-2 py-1.5 text-[11px] font-semibold transition hover:bg-white dark:border-white/10 dark:hover:bg-white/10"
                 >
-                  {d.label}
+                  {t(`role.${d.role}`)}
                 </button>
               ))}
             </div>
-          </div>
+          </div>}
         </Card>
       </motion.div>
     </div>

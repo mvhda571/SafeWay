@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { Ambulance, Flame, Phone, ShieldAlert, Siren, X, GraduationCap } from "lucide-react";
 import { useI18n } from "./providers";
@@ -18,13 +18,20 @@ const NUMBERS: { key: TKey; tel: string; icon: typeof Phone; cls: string }[] = [
   },
 ];
 
-/** Floating SOS panel — always visible above the mobile bottom nav. */
+/** Floating SOS panel (102 / 103 / 1050 / school inspector) — always visible above the mobile bottom nav. */
 export function EmergencyBar() {
   const { t } = useI18n();
   const [open, setOpen] = useState(false);
 
+  // Desktop: the numbers are always visible. Phone: collapsed into one button so the map stays usable.
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- depends on the viewport, unknown during SSR
+    if (matchMedia("(min-width: 768px)").matches) setOpen(true);
+  }, []);
+
   return (
-    <div className="fixed bottom-24 right-4 z-[1000] flex flex-col items-end gap-3 md:bottom-6 md:right-6">
+    // Phone: sits above the floating bottom nav and the iPhone home indicator.
+    <div className="fixed bottom-[calc(6rem+env(safe-area-inset-bottom))] right-3 z-[1000] flex flex-col items-end gap-3 md:bottom-6 md:right-6">
       <AnimatePresence>
         {open && (
           <motion.div
@@ -61,7 +68,7 @@ export function EmergencyBar() {
         onClick={() => setOpen((o) => !o)}
         aria-label={t("sos.title")}
         aria-expanded={open}
-        className="relative grid size-14 place-items-center rounded-full bg-gradient-to-br from-red-500 to-rose-700 text-white shadow-[0_10px_30px_-6px_rgb(239_68_68/0.8)]"
+        className="relative grid size-12 place-items-center rounded-full md:size-14 bg-gradient-to-br from-red-500 to-rose-700 text-white shadow-[0_10px_30px_-6px_rgb(239_68_68/0.8)]"
       >
         {!open && <span className="absolute inset-0 animate-ping rounded-full bg-red-500/40" />}
         {open ? <X className="size-6" /> : <Siren className="size-6" />}

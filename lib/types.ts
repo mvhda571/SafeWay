@@ -1,6 +1,7 @@
 export const SESSION_COOKIE = "sw_session";
 
-export type Role ="parent" | "school_admin" | "super_admin";
+export type Role = "parent" | "school_admin" | "super_admin";
+export const ROLES: Role[] = ["parent", "school_admin", "super_admin"];
 
 export type Category = "open_manhole" | "unlit_street" | "stray_dogs" | "speeding";
 export type Severity = "low" | "medium" | "high";
@@ -17,10 +18,19 @@ export interface User {
   passwordHash: string;
   role: Role;
   createdAt: string;
+  /** Profile settings (all optional). */
+  lang?: "uz" | "ru" | "en" | null;
+  home?: SavedPlace | null;
+  school?: SavedPlace | null;
 }
+
+export interface SavedPlace { lat: number; lng: number; label: string }
 
 export type PublicUser = Omit<User, "passwordHash">;
 
+export interface ProfileStats { reported: number; resolved: number; confirmed: number }
+
+/** All ids are MongoDB ObjectId hex strings (24 chars). */
 export interface Hazard {
   id: string;
   title: string;
@@ -30,8 +40,11 @@ export interface Hazard {
   status: Status;
   lat: number;
   lng: number;
+  /** Street address from reverse geocoding (null if the lookup failed). */
+  address: string | null;
   imageUrl: string | null;
   confirmations: string[];
+  statusHistory: { status: Status; at: string }[];
   createdBy: string;
   createdAt: string;
   updatedAt: string;
@@ -49,6 +62,7 @@ export interface TelegramLog {
   hazardId: string;
   text: string;
   delivered: boolean;
+  error?: string | null;
   createdAt: string;
 }
 

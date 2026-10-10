@@ -53,21 +53,25 @@ export async function getSession() {
   return verifyToken((await cookies()).get(SESSION_COOKIE)?.value);
 }
 
+/**
+ * `code` is stable and machine-readable; the client translates it via the `err.<code>` i18n keys.
+ * `message` is an English fallback for API consumers.
+ */
 export class HttpError extends Error {
-  constructor(public status: number, message: string) {
-    super(message);
+  constructor(public status: number, public code: string, message?: string, public extra?: Record<string, unknown>) {
+    super(message ?? code);
   }
 }
 
 export async function requireUser() {
   const s = await getSession();
-  if (!s) throw new HttpError(401, "Unauthorized");
+  if (!s) throw new HttpError(401, "unauthorized", "Unauthorized");
   return s;
 }
 
 export async function requireAdmin() {
   const s = await requireUser();
-  if (!isAdmin(s.role)) throw new HttpError(403, "Forbidden");
+  if (!isAdmin(s.role)) throw new HttpError(403, "forbidden", "Forbidden");
   return s;
 }
 
@@ -78,8 +82,12 @@ export async function handle(fn: () => Promise<Response>): Promise<Response> {
   } catch (e) {
     // Let Next.js internal signals (e.g. prerender bail-out) propagate.
     unstable_rethrow(e);
-    if (e instanceof HttpError) return Response.json({ error: e.message }, { status: e.status });
+    if (e instanceof HttpError) return Response.json({ error: e.message, code: e.code, ...e.extra }, { status: e.status });
     console.error(e);
-    return Response.json({ error: "Internal error" }, { status: 500 });
+    const db = e instanceof Error && /mongo|MONGODB_URI|ECONNREFUSED|querySrv/i.test(`${e.name} ${e.message}`);
+    return Response.json(
+      { error: db ? "Database unavailable" : "Internal error", code: db ? "db_unavailable" : "internal" },
+      { status: db ? 503 : 500 },
+    );
   }
 }

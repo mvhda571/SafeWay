@@ -6,10 +6,11 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "seed": "tsx --env-file-if-exists=.env.local scripts/seed.ts",
+    "migrate": "tsx --env-file-if-exists=.env.local scripts/migrate.ts"
   },
   "dependencies": {
-    "@netlify/blobs": "^11.1.4",
     "@react-leaflet/core": "^3.0.0",
     "bcryptjs": "^3.0.3",
     "clsx": "^2.1.1",
@@ -17,6 +18,7 @@
     "jose": "^6.2.12",
     "leaflet": "^1.9.4",
     "lucide-react": "^1.55.0",
+    "mongoose": "^8.24.5",
     "next": "16.4.0",
     "react": "19.3.0",
     "react-dom": "19.3.0",
@@ -34,6 +36,7 @@
     "eslint": "^9",
     "eslint-config-next": "16.4.0",
     "tailwindcss": "^4",
+    "tsx": "^4.23.15",
     "typescript": "^5"
   }
 }

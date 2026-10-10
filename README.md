@@ -7,12 +7,14 @@ Ota-onalar va maktablar uchun xavf xaritasi: xavf qo'shish, "+1 Men ham ko'rdim"
 
 ```bash
 npm install
-cp .env.example .env.local   # ixtiyoriy: Telegram va AUTH_SECRET
+cp .env.example .env.local   # MONGODB_URI ni to'ldiring (oxirida /safeway)
+npm run seed                 # demo foydalanuvchilar + Toshkent bo'ylab 14 ta demo xavf
 npm run dev                  # http://localhost:3000
 ```
 
-Birinchi so'rovda `data/db.json` demo ma'lumotlar (Toshkent bo'ylab 14 ta xavf) bilan avtomatik yaratiladi.
-Qayta boshlash uchun `data/` papkasini o'chiring.
+`npm run seed -- --reset` — xavflar, rasmlar va Telegram jurnalini tozalab, demo ma'lumotlarni qayta yozadi.
+
+Demo hisoblar (login sahifasida faqat `DEMO_MODE=true` bo'lsa ko'rinadi):
 
 | Rol | Email | Parol |
 |---|---|---|
@@ -25,59 +27,49 @@ Qayta boshlash uchun `data/` papkasini o'chiring.
 ```
 app/
   page.tsx, landing.tsx          Bosh sahifa (hero, statistika, so'nggi xabarlar)
-  map/                           Xarita + filtrlar + "Atrofimdagi xavflar" (500 m)
+  map/                           Xarita + filtrlar + "Atrofimdagi xavflar" (500 m, GPS kuzatuvi)
+  hazards/[id]/                  Xavf sahifasi: holat kuzatuvi (Mavjud → O'rganilmoqda → Bartaraf etildi)
   route/                         Xavfsiz yo'nalish (Uy → Maktab)
   login/                         Kirish / Ro'yxatdan o'tish
   admin/                         Moderator paneli: KPI, grafiklar, jadval, Telegram log
   api/
     auth/{login,signup,logout,me}
-    hazards/            GET (filtr: category, status, lat/lng/radius), POST
-    hazards/[id]        PATCH (status/severity/category), DELETE   — faqat admin
-    hazards/[id]/confirm POST — +1 ovozni yoqish/o'chirish
-    upload, uploads/[file]       Rasm yuklash (JPG/PNG/WEBP, ≤ 4.5 MB)
+    hazards/            GET (filtr: category, status, lat/lng/radius), POST (6 ta / 10 daqiqa)
+    hazards/[id]        GET; PATCH (status/severity/category), DELETE — faqat admin (aks holda 403)
+    hazards/[id]/confirm POST — "+1", har foydalanuvchi bir marta (takror → 409)
+    upload, uploads/[id]         Rasm MongoDB'da (klientda ≤ 1280 px, ≤ 2 MB)
     route-plan          OSRM + xavf bo'yicha baholash + aylanma yo'l
     geocode             Nominatim manzil qidiruvi (server orqali)
     admin/stats         Dashboard statistikasi
 components/                      App shell, bottom nav, SOS panel, report modal, xarita, kartochkalar
 lib/
-  store.ts     JSON fayl bazasi (Prisma modellari bilan 1:1)
+  db.ts        MongoDB ulanishi (global kesh) + Mongoose modellari
+  store.ts     Ma'lumotlar qatlami (API javob shakli shu yerda)
   auth.ts      JWT (jose) + httpOnly cookie, rollar
   routing.ts   Xavfsiz yo'nalish algoritmi
   telegram.ts  Telegram xabar shabloni va yuborish
   i18n.ts      UZ / RU / EN lug'atlar
 proxy.ts       /admin uchun optimistik himoya (API har so'rovda rolni qayta tekshiradi)
-prisma/        PostgreSQL + PostGIS sxemasi va ST_DWithin indeks/trigger
+scripts/seed.ts  Demo ma'lumotlar
 ```
 
 ## Xavfsiz yo'nalish qanday ishlaydi
 
 1. OSRM (piyoda profili) dan to'g'ri yo'l va muqobillar olinadi.
-2. Har bir yo'l 60 m bufer ichidagi faol xavflar bo'yicha baholanadi: past = 2, o'rta = 10, yuqori = 100.
-3. Eng yaxshi yo'l hali ham qizil xavfdan o'tsa, xavf atrofida 250/450 m uzoqlikdagi oraliq nuqtalar
-   orqali aylanma yo'llar sinab ko'riladi (to'g'ri yo'ldan 2.2 baravardan uzun bo'lmagan).
-4. Eng past xavfli (teng bo'lsa — eng qisqa) yo'l yashil chiziq bilan chiziladi.
-
-Marshrut serveri javob bermasa, to'g'ri chiziq va ogohlantirish ko'rsatiladi.
+2. Har bir yo'l 45 m bufer ichidagi faol xavflar bo'yicha baholanadi: past = 2, o'rta = 10, yuqori = 100.
+3. Eng yaxshi yo'l hali ham xavfdan o'tsa, eng xavfli 2 ta nuqtaning ikki yonidan (300 m) aylanma yo'llar sinaladi.
+4. Eng kam xavfli yo'l yashil, eng qisqa (lekin xavfliroq) yo'l kulrang punktir; "N ta xavf chetlab o'tildi".
+5. Hammasi 7 s ichida tugaydi (Netlify limiti 10 s). Marshrut serveri javob bermasa — 502 va xato xabari.
 
 ## Telegram
 
-`.env.local` da `TELEGRAM_BOT_TOKEN` va `TELEGRAM_CHAT_ID` ni to'ldiring — yangi 🔴 yuqori xavf guruhga
-yuboriladi. Bo'sh qolsa, simulyatsiya rejimi: xabar admin panelida va xavf qo'shilgandan keyin preview
-sifatida ko'rinadi.
+`BOT_TOKEN` va `TELEGRAM_CHANNEL_ID` (masalan `@safeway_parents` yoki `-100…`) ni kiriting, botni kanalga admin qiling.
+Har bir yangi 🔴 yuqori xavf kanalga yuboriladi: tur, manzil, izoh, Google Maps va saytdagi xavf sahifasi havolasi.
+Telegram xato bersa ham xavf saqlanadi; natija admin panelidagi jurnalda ko'rinadi. O'zgaruvchilar bo'sh bo'lsa — simulyatsiya.
 
 ## Netlify
 
-Hech narsa sozlash shart emas: Netlify'da ma'lumotlar va rasmlar avtomatik ravishda **Netlify Blobs**
-(`safeway` store) da saqlanadi, chunki serverless funksiyalarda fayl tizimi faqat o'qish uchun.
-Lokal ishga tushirganda esa `./data` ishlatiladi ([lib/storage.ts](lib/storage.ts)).
-
-`AUTH_SECRET` ixtiyoriy — berilmasa, tasodifiy kalit bir marta yaratilib, ma'lumotlar bilan saqlanadi.
-Telegram uchun: Site settings → Environment variables → `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID`.
-
-## Production'ga o'tish
-
-- **Baza:** `prisma/schema.prisma` + `prisma/postgis.sql` ni qo'llang va `lib/store.ts` funksiyalarini
-  Prisma chaqiruvlari bilan almashtiring (imzolar o'zgarmaydi). Radius so'rovi uchun `ST_DWithin` misoli SQL faylda.
-- **Rasmlar:** `app/api/upload/route.ts` ni Supabase Storage yoki Cloudinary'ga yo'naltiring.
-- **Google login:** tugma tayyor; NextAuth/Supabase Google provider'ni ulang.
-- **OSRM / Nominatim:** ochiq demo serverlar — katta trafik uchun o'z serveringizni ko'taring.
+Site settings → Environment variables: `MONGODB_URI`, `AUTH_SECRET`, `BOT_TOKEN`, `TELEGRAM_CHANNEL_ID`,
+`NEXT_PUBLIC_INSPECTOR_PHONE`, `DEMO_MODE`. `NEXT_PUBLIC_*` va `DEMO_MODE` build vaqtida o'qiladi — o'zgartirgandan keyin
+qayta deploy qiling. MongoDB Atlas → Network Access: `0.0.0.0/0` (Netlify funksiyalari IP manzili o'zgarib turadi).
+Barcha ma'lumotlar (xavflar, ovozlar, statuslar, rasmlar) Atlas'da — qayta deploy yoki funksiya qayta ishga tushishi ularga ta'sir qilmaydi.

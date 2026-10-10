@@ -1,9 +1,14 @@
 import { getSession, handle, HttpError, requireUser } from "@/lib/auth";
-import { createHazard, listHazards } from "@/lib/store";
+import { countRecentHazards, createHazard, listHazards } from "@/lib/store";
 import { toDTOs } from "@/lib/hazards";
-import { notifyHighHazard } from "@/lib/telegram";
-import { haversine } from "@/lib/geo";
+import { notifyHighHazard, CATEGORY_UZ } from "@/lib/telegram";
+import { reverseGeocode } from "@/lib/geocode";
 import { CATEGORIES, SEVERITIES, STATUSES, type Category, type Severity, type Status } from "@/lib/types";
+
+/** Anti-spam: at most RATE_MAX new hazards per user within RATE_WINDOW. */
+const RATE_MAX = 6;
+const RATE_WINDOW = 10 * 60 * 1000;
+const IMAGE_URL = /^\/api\/uploads\/[0-9a-f]{24}$/;
 
 /** GET /api/hazards?category=&status=&lat=&lng=&radius= */
 export async function GET(req: Request) {
@@ -15,12 +20,11 @@ export async function GET(req: Request) {
     const lng = Number(url.searchParams.get("lng"));
     const radius = Number(url.searchParams.get("radius") ?? 0);
 
-    let hazards = await listHazards();
-    if (category && CATEGORIES.includes(category)) hazards = hazards.filter((h) => h.category === category);
-    if (status && STATUSES.includes(status)) hazards = hazards.filter((h) => h.status === status);
-    if (radius > 0 && Number.isFinite(lat) && Number.isFinite(lng)) {
-      hazards = hazards.filter((h) => haversine([lat, lng], [h.lat, h.lng]) <= radius);
-    }
+    const hazards = await listHazards({
+      category: category && CATEGORIES.includes(category) ? category : undefined,
+      status: status && STATUSES.includes(status) ? status : undefined,
+      near: radius > 0 && Number.isFinite(lat) && Number.isFinite(lng) && url.searchParams.has("lat") ? { lat, lng, radius } : undefined,
+    });
     const session = await getSession();
     return Response.json({ hazards: await toDTOs(hazards, session?.sub) });
   });
@@ -29,31 +33,39 @@ export async function GET(req: Request) {
 export async function POST(req: Request) {
   return handle(async () => {
     const session = await requireUser();
-    const body = (await req.json()) as Partial<{
+    const body = (await req.json().catch(() => ({}))) as Partial<{
       title: string; description: string; category: Category; severity: Severity;
       lat: number; lng: number; imageUrl: string | null;
     }>;
-    const { category, severity, lat, lng } = body;
-    if (!category || !CATEGORIES.includes(category)) throw new HttpError(400, "Invalid category");
-    if (!severity || !SEVERITIES.includes(severity)) throw new HttpError(400, "Invalid severity");
-    if (typeof lat !== "number" || typeof lng !== "number" || Math.abs(lat) > 90 || Math.abs(lng) > 180) {
-      throw new HttpError(400, "Invalid coordinates");
+    const { category, lat, lng } = body;
+    // Category and location are the only required fields.
+    if (!category || !CATEGORIES.includes(category)) throw new HttpError(400, "invalid_category", "Category is required");
+    if (typeof lat !== "number" || typeof lng !== "number" || !Number.isFinite(lat) || !Number.isFinite(lng) || Math.abs(lat) > 90 || Math.abs(lng) > 180) {
+      throw new HttpError(400, "invalid_coordinates", "Location is required");
     }
-    const title = body.title?.trim().slice(0, 120);
-    if (!title) throw new HttpError(400, "Title is required");
-    const imageUrl = body.imageUrl && body.imageUrl.startsWith("/api/uploads/") ? body.imageUrl : null;
+    if (body.severity !== undefined && !SEVERITIES.includes(body.severity)) throw new HttpError(400, "invalid_severity", "Invalid severity");
+    const severity = body.severity ?? "medium";
 
+    if ((await countRecentHazards(session.sub, RATE_WINDOW)) >= RATE_MAX) {
+      throw new HttpError(429, "rate_limited", `At most ${RATE_MAX} reports per 10 minutes`);
+    }
+
+    const address = await reverseGeocode(lat, lng);
     const hazard = await createHazard({
-      title,
+      title: body.title?.trim().slice(0, 120) || CATEGORY_UZ[category],
       description: (body.description ?? "").trim().slice(0, 1000),
       category,
       severity,
       lat,
       lng,
-      imageUrl,
+      address,
+      imageUrl: typeof body.imageUrl === "string" && IMAGE_URL.test(body.imageUrl) ? body.imageUrl : null,
       createdBy: session.sub,
     });
-    const telegram = severity === "high" ? await notifyHighHazard(hazard, session.name) : null;
+
+    // The hazard is already saved; a Telegram failure must never fail the request.
+    const origin = process.env.SITE_URL || process.env.URL || new URL(req.url).origin;
+    const telegram = severity === "high" ? await notifyHighHazard(hazard, session.name, origin).catch(() => null) : null;
     const [dto] = await toDTOs([hazard], session.sub);
     return Response.json({ hazard: dto, telegram }, { status: 201 });
   });

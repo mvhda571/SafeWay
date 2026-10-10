@@ -5,27 +5,44 @@ import { AnimatePresence, motion } from "framer-motion";
 import { AlertTriangle, CheckCircle2, Crosshair, Footprints, Loader2, MapPinned, Navigation, Route as RouteIcon, Ruler, Search } from "lucide-react";
 import { MapView, type MapRoute } from "@/components/map";
 import { HazardPopup } from "@/components/hazard-card";
-import { useHazards, useI18n } from "@/components/providers";
+import { useAuth, useErrText, useHazards, useI18n } from "@/components/providers";
 import { Button, Card, inputCls } from "@/components/ui";
 import { formatDistance, type LatLng } from "@/lib/geo";
 import { api, cn, getPosition } from "@/lib/utils";
+import type { SavedPlace } from "@/lib/types";
 
 type Which = "home" | "school";
 interface Point { pos: LatLng; label: string }
 interface ScoredRoute {
   geometry: LatLng[]; distance: number; duration: number; risk: number;
-  hazardIds: string[]; highCount: number; kind: "direct" | "alternative" | "detour" | "fallback";
+  hazardIds: string[]; highCount: number; kind: "direct" | "alternative" | "detour";
 }
 
 export function RouteScreen() {
   const { t } = useI18n();
   const { hazards } = useHazards();
+  const errText = useErrText();
+  const { user } = useAuth();
   const [points, setPoints] = useState<Record<Which, Point | null>>({ home: null, school: null });
   const [picking, setPicking] = useState<Which | null>(null);
-  const [result, setResult] = useState<{ safest: ScoredRoute; others: ScoredRoute[] } | null>(null);
+  const [result, setResult] = useState<{ safest: ScoredRoute; others: ScoredRoute[]; avoided: number } | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [fitTo, setFitTo] = useState<{ points: LatLng[]; key: number } | null>(null);
+
+  // Prefill home / school from the profile (only points the user hasn't set on this page yet).
+  useEffect(() => {
+    if (!user) return;
+    api<{ user: { home?: SavedPlace | null; school?: SavedPlace | null } }>("/api/me")
+      .then(({ user: u }) => {
+        const toPoint = (p?: SavedPlace | null): Point | null => (p ? { pos: [p.lat, p.lng], label: p.label } : null);
+        const home = toPoint(u.home), school = toPoint(u.school);
+        if (!home && !school) return;
+        setPoints((prev) => ({ home: prev.home ?? home, school: prev.school ?? school }));
+        setFitTo({ points: [home?.pos, school?.pos].filter(Boolean) as LatLng[], key: Date.now() });
+      })
+      .catch(() => {});
+  }, [user]);
 
   const active = useMemo(() => hazards.filter((h) => h.status !== "resolved"), [hazards]);
 
@@ -41,13 +58,14 @@ export function RouteScreen() {
     setError(null);
     try {
       const q = (p: LatLng) => `${p[0]},${p[1]}`;
-      const d = await api<{ safest: ScoredRoute; others: ScoredRoute[] }>(
+      const d = await api<{ safest: ScoredRoute; others: ScoredRoute[]; avoided: number }>(
         `/api/route-plan?from=${q(points.home.pos)}&to=${q(points.school.pos)}`,
       );
       setResult(d);
       setFitTo({ points: d.safest.geometry, key: Date.now() });
     } catch (e) {
-      setError(e instanceof Error ? e.message : t("common.error"));
+      setResult(null);
+      setError(errText(e));
     } finally {
       setBusy(false);
     }
@@ -121,7 +139,7 @@ export function RouteScreen() {
           {busy ? <Loader2 className="size-4 animate-spin" /> : <Navigation className="size-4" />}
           {busy ? t("route.building") : t("route.build")}
         </Button>
-        {error && <p className="rounded-xl bg-red-500/10 p-3 text-sm text-red-600">{error}</p>}
+        {error && <p role="alert" className="rounded-xl bg-red-500/10 p-3 text-sm text-red-600">{error}</p>}
 
         <AnimatePresence>
           {s && (
@@ -142,7 +160,11 @@ export function RouteScreen() {
                   </div>
                 </div>
                 <div className="space-y-2 p-4 text-sm">
-                  {s.kind === "fallback" && <Note warn>{t("route.fallback")}</Note>}
+                  {result.avoided > 0 && (
+                    <p className="flex items-center gap-2 rounded-xl bg-emerald-500/10 px-3 py-2 font-bold text-emerald-700 dark:text-emerald-300">
+                      <CheckCircle2 className="size-4 shrink-0" />{t("route.avoided", { n: result.avoided })}
+                    </p>
+                  )}
                   {s.kind === "detour" && <Note>{t("route.detour")}</Note>}
                   {s.hazardIds.length === 0 ? <Note>{t("route.clean")}</Note> : <Note warn>{t("route.passes", { n: s.hazardIds.length })}</Note>}
                   {s.highCount > 0 && <Note warn>{t("route.highWarn")}</Note>}
@@ -216,7 +238,7 @@ function PointInput({
         <div className="relative flex-1">
           <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-zinc-400" />
           <input
-            className={cn(inputCls, "pl-9")}
+            className={cn(inputCls, "min-h-11 pl-9")}
             placeholder={`${t(which === "home" ? "route.home" : "route.school")} — ${t("route.searchPh")}`}
             value={shown}
             onChange={(e) => setQ(e.target.value)}
@@ -236,14 +258,14 @@ function PointInput({
                 setQ("");
               } catch {} finally { setLocating(false); }
             }}
-            className="inline-flex items-center gap-1 rounded-lg bg-zinc-900/5 px-2 py-1 text-xs font-medium dark:bg-white/10"
+            className="inline-flex min-h-11 items-center gap-1 rounded-lg bg-zinc-900/5 px-3 py-1 text-xs font-medium dark:bg-white/10 md:min-h-8"
           >
             {locating ? <Loader2 className="size-3 animate-spin" /> : <Crosshair className="size-3" />}{t("route.myLocation")}
           </button>
         )}
         <button
           onClick={onPick}
-          className={cn("inline-flex items-center gap-1 rounded-lg px-2 py-1 text-xs font-medium", picking ? "bg-indigo-600 text-white" : "bg-zinc-900/5 dark:bg-white/10")}
+          className={cn("inline-flex min-h-11 items-center gap-1 rounded-lg px-3 py-1 text-xs font-medium md:min-h-8", picking ? "bg-indigo-600 text-white" : "bg-zinc-900/5 dark:bg-white/10")}
         >
           <MapPinned className="size-3" />{t("route.pickOnMap")}
         </button>

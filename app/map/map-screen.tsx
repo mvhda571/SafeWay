@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { AlertTriangle, Crosshair, Filter, List, Loader2, Radar, RotateCcw } from "lucide-react";
 import { MapView } from "@/components/map";
@@ -9,7 +9,7 @@ import { useHazards, useI18n } from "@/components/providers";
 import { CATEGORY_ICON, STATUS_ICON } from "@/components/ui";
 import { CATEGORIES, STATUSES, type Category, type HazardDTO, type Status } from "@/lib/types";
 import { haversine, type LatLng } from "@/lib/geo";
-import { cn, getPosition } from "@/lib/utils";
+import { cn, geoErrorKey } from "@/lib/utils";
 
 const RADIUS = 500;
 
@@ -21,7 +21,8 @@ export function MapScreen() {
   const [tab, setTab] = useState<"nearby" | "list">("list");
   const [userPos, setUserPos] = useState<LatLng | null>(null);
   const [locating, setLocating] = useState(false);
-  const [denied, setDenied] = useState(false);
+  const [geoError, setGeoError] = useState<"nearby.denied" | "nearby.unavailable" | null>(null);
+  const watchId = useRef<number | null>(null);
   const [selected, setSelected] = useState<string | null>(null);
   const [flyTo, setFlyTo] = useState<{ pos: LatLng; zoom?: number; key: number } | null>(null);
 
@@ -40,20 +41,55 @@ export function MapScreen() {
   }, [hazards, userPos]);
   const nearbyHigh = nearby.filter((x) => x.h.severity === "high").length;
 
-  async function locate() {
+  /** Keeps following the GPS position so the 500 m list and alert update while walking. */
+  const startWatch = useCallback(() => {
+    if (!("geolocation" in navigator)) return setGeoError("nearby.unavailable");
     setLocating(true);
-    setDenied(false);
+    setGeoError(null);
+    if (watchId.current !== null) navigator.geolocation.clearWatch(watchId.current);
+    let first = true;
+    watchId.current = navigator.geolocation.watchPosition(
+      (p) => {
+        const pos: LatLng = [p.coords.latitude, p.coords.longitude];
+        setUserPos(pos);
+        setLocating(false);
+        setGeoError(null);
+        if (first) setFlyTo({ pos, zoom: 16, key: Date.now() });
+        first = false;
+      },
+      (e) => {
+        setLocating(false);
+        setGeoError(geoErrorKey(e));
+        if (e.code === 1 && watchId.current !== null) {
+          navigator.geolocation.clearWatch(watchId.current);
+          watchId.current = null;
+        }
+      },
+      { enableHighAccuracy: true, timeout: 15000, maximumAge: 10000 },
+    );
+  }, []);
+
+  function locate() {
     setTab("nearby");
-    try {
-      const p = await getPosition();
-      setUserPos(p);
-      setFlyTo({ pos: p, zoom: 16, key: Date.now() });
-    } catch {
-      setDenied(true);
-    } finally {
-      setLocating(false);
-    }
+    startWatch();
   }
+
+  // If location permission was granted before, start the radar right away.
+  useEffect(() => {
+    navigator.permissions?.query({ name: "geolocation" })
+      .then((r) => { if (r.state === "granted") startWatch(); })
+      .catch(() => {});
+    return () => { if (watchId.current !== null) navigator.geolocation.clearWatch(watchId.current); };
+  }, [startWatch]);
+
+  // Vibrate whenever a new high-risk hazard enters the 500 m radius.
+  const highKey = nearby.filter((x) => x.h.severity === "high").map((x) => x.h.id).join(",");
+  const alerted = useRef("");
+  useEffect(() => {
+    const fresh = highKey.split(",").some((id) => id && !alerted.current.split(",").includes(id));
+    if (fresh) navigator.vibrate?.([400, 150, 400, 150, 400]);
+    alerted.current = highKey;
+  }, [highKey]);
 
   function focus(h: HazardDTO) {
     setSelected(h.id);
@@ -76,7 +112,7 @@ export function MapScreen() {
         <div className="pointer-events-none absolute right-3 top-3 z-[500] flex flex-col items-end gap-2">
           <button
             onClick={locate}
-            className="glass pointer-events-auto inline-flex items-center gap-2 rounded-xl px-3 py-2 text-sm font-semibold shadow-lg"
+            className="glass pointer-events-auto inline-flex min-h-11 items-center gap-2 rounded-xl px-3 py-2 text-sm font-semibold shadow-lg md:min-h-0"
           >
             {locating ? <Loader2 className="size-4 animate-spin" /> : <Crosshair className="size-4 text-sky-500" />}
             {locating ? t("nearby.locating") : t("nearby.locate")}
@@ -102,6 +138,7 @@ export function MapScreen() {
                 <span className="absolute inset-0 animate-ping rounded-xl bg-white/20" />
               </span>
               <div className="text-sm">
+                {nearbyHigh > 0 && <p className="font-black uppercase tracking-wide">{t("nearby.alertTitle")}</p>}
                 <p className="font-bold">{t("nearby.alert", { n: nearby.length })}</p>
                 {nearbyHigh > 0 && <p className="text-white/85">{t("nearby.alertHigh", { n: nearbyHigh })}</p>}
               </div>
@@ -116,7 +153,7 @@ export function MapScreen() {
           <div className="flex items-center justify-between">
             <h2 className="flex items-center gap-2 text-sm font-bold"><Filter className="size-4" />{t("filter.title")}</h2>
             {(category !== "all" || status !== "all") && (
-              <button onClick={() => { setCategory("all"); setStatus("all"); }} className="inline-flex items-center gap-1 text-xs font-semibold text-emerald-600">
+              <button onClick={() => { setCategory("all"); setStatus("all"); }} className="inline-flex min-h-11 items-center gap-1 text-xs font-semibold text-emerald-600 md:min-h-0">
                 <RotateCcw className="size-3" /> {t("filter.reset")}
               </button>
             )}
@@ -142,7 +179,7 @@ export function MapScreen() {
             <button
               key={k}
               onClick={() => setTab(k)}
-              className={cn("relative flex flex-1 items-center justify-center gap-1.5 rounded-xl py-2 text-sm font-semibold transition", tab === k ? "text-zinc-900 dark:text-white" : "text-zinc-500")}
+              className={cn("relative flex min-h-11 flex-1 items-center justify-center gap-1.5 rounded-xl py-2 text-sm font-semibold transition", tab === k ? "text-zinc-900 dark:text-white" : "text-zinc-500")}
             >
               {tab === k && <motion.span layoutId="map-tab" className="absolute inset-0 -z-10 rounded-xl bg-zinc-900/5 dark:bg-white/10" />}
               <Icon className="size-4" /> {label}
@@ -171,11 +208,11 @@ export function MapScreen() {
                   <p className="font-semibold">{t("nearby.title")}</p>
                   <p className="text-xs text-zinc-500">{t("nearby.radius", { r: RADIUS })}</p>
                 </div>
-                <button onClick={locate} className="rounded-xl bg-sky-500 px-3 py-1.5 text-xs font-semibold text-white">
+                <button onClick={locate} aria-label={t("nearby.locate")} className="grid size-11 place-items-center rounded-xl bg-sky-500 text-xs font-semibold text-white">
                   {locating ? <Loader2 className="size-4 animate-spin" /> : <Crosshair className="size-4" />}
                 </button>
               </div>
-              {denied && <p className="rounded-xl bg-red-500/10 p-3 text-sm text-red-600">{t("nearby.denied")}</p>}
+              {geoError && <p role="alert" className="rounded-xl bg-red-500/10 p-3 text-sm text-red-600">{t(geoError)}</p>}
               {userPos && nearby.length === 0 && <p className="py-8 text-center text-sm text-zinc-500">{t("nearby.empty")}</p>}
               {nearby.map(({ h, d }, i) => (
                 <HazardCard key={h.id} hazard={h} index={i} distance={d} active={selected === h.id} onClick={() => focus(h)} />
@@ -203,7 +240,7 @@ function Chip({ on, onClick, children }: { on: boolean; onClick: () => void; chi
       onClick={onClick}
       aria-pressed={on}
       className={cn(
-        "inline-flex shrink-0 items-center gap-1 rounded-full border px-3 py-1.5 text-xs font-semibold transition",
+        "inline-flex min-h-11 shrink-0 items-center gap-1 rounded-full border px-3 py-1.5 text-xs font-semibold transition md:min-h-0",
         on ? "border-emerald-500 bg-emerald-500 text-white shadow-md shadow-emerald-500/25" : "border-zinc-900/10 hover:bg-zinc-900/5 dark:border-white/10 dark:hover:bg-white/5",
       )}
     >

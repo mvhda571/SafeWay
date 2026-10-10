@@ -36,14 +36,17 @@ function pinIcon(h: HazardDTO) {
   if (!icon) {
     const c = SEVERITY_COLOR[h.severity];
     const pulse = h.severity === "high" && h.status !== "resolved";
+    // High-risk pins are drawn ~35% larger so they stand out.
+    const k = h.severity === "high" ? 1.35 : 1;
+    const w = Math.round(34 * k), ht = Math.round(44 * k);
     icon = L.divIcon({
       className: "",
-      iconSize: [34, 44],
-      iconAnchor: [17, 42],
-      popupAnchor: [0, -38],
-      html: `<div class="sw-pin ${h.status === "resolved" ? "resolved" : ""}" style="--c:${c}">
-        ${pulse ? '<span class="ring"></span>' : ""}
-        <svg width="34" height="44" viewBox="0 0 34 44"><path d="M17 43s14-14.2 14-25A14 14 0 0 0 3 18c0 10.8 14 25 14 25z" fill="${c}" stroke="white" stroke-width="2.5"/>
+      iconSize: [w, ht],
+      iconAnchor: [w / 2, ht - 2],
+      popupAnchor: [0, -ht + 6],
+      html: `<div class="sw-pin ${h.status === "resolved" ? "resolved" : ""}" style="--c:${c};width:${w}px;height:${ht}px">
+        ${pulse ? `<span class="ring" style="left:${7 * k}px;top:${27 * k}px;width:${20 * k}px;height:${20 * k}px"></span>` : ""}
+        <svg width="${w}" height="${ht}" viewBox="0 0 34 44"><path d="M17 43s14-14.2 14-25A14 14 0 0 0 3 18c0 10.8 14 25 14 25z" fill="${c}" stroke="white" stroke-width="2.5"/>
         <circle cx="17" cy="18" r="5.5" fill="white"/>${h.status === "resolved" ? '<path d="M14 18l2 2 4-4" stroke="' + c + '" stroke-width="2" fill="none"/>' : ""}</svg>
       </div>`,
     });

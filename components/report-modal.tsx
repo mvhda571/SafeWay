@@ -5,9 +5,9 @@ import Link from "next/link";
 import { AnimatePresence, motion } from "framer-motion";
 import { Camera, Crosshair, ImagePlus, Loader2, Send, Trash2, X, LogIn, Send as TgIcon } from "lucide-react";
 import { CATEGORIES, SEVERITIES, SEVERITY_COLOR, type Category, type HazardDTO, type Severity, type TelegramLog } from "@/lib/types";
-import { api, cn, getPosition, jsonInit } from "@/lib/utils";
+import { api, cn, geoErrorKey, getFix, jsonInit, shrinkImage } from "@/lib/utils";
 import type { LatLng } from "@/lib/geo";
-import { useAuth, useHazards, useI18n, useUi } from "./providers";
+import { useAuth, useErrText, useHazards, useI18n, useUi } from "./providers";
 import { MapView } from "./map";
 import { Button, CATEGORY_ICON, Field, inputCls } from "./ui";
 
@@ -43,7 +43,7 @@ export function ReportModal() {
             exit={{ y: 60, opacity: 0, scale: 0.97 }}
             transition={{ type: "spring", stiffness: 320, damping: 30 }}
             onClick={(e) => e.stopPropagation()}
-            className="glass max-h-[92dvh] w-full overflow-y-auto rounded-t-3xl shadow-2xl sm:max-w-2xl sm:rounded-3xl"
+            className="glass max-h-[94dvh] w-full overflow-y-auto overscroll-contain rounded-t-3xl shadow-2xl sm:max-h-[92dvh] sm:max-w-2xl sm:rounded-3xl"
           >
             <ReportForm onDone={closeReport} />
           </motion.div>
@@ -58,20 +58,25 @@ function ReportForm({ onDone }: { onDone: () => void }) {
   const { user } = useAuth();
   const { upsert, hazards } = useHazards();
   const { toast } = useUi();
+  const errText = useErrText();
 
   const [pos, setPos] = useState<LatLng | null>(null);
+  /** GPS accuracy in metres; null when the point was picked on the map. */
+  const [accuracy, setAccuracy] = useState<number | null>(null);
   const [flyTo, setFlyTo] = useState<{ pos: LatLng; key: number } | null>(null);
   const [locating, setLocating] = useState(false);
-  const [category, setCategory] = useState<Category>("open_manhole");
+  const [category, setCategory] = useState<Category | null>(null);
   const [severity, setSeverity] = useState<Severity>("medium");
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [file, setFile] = useState<File | null>(null);
   const [preview, setPreview] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [processing, setProcessing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [tgPreview, setTgPreview] = useState<TelegramLog | null>(null);
-  const fileRef = useRef<HTMLInputElement>(null);
+  const cameraRef = useRef<HTMLInputElement>(null);
+  const galleryRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => () => { if (preview) URL.revokeObjectURL(preview); }, [preview]);
 
@@ -79,28 +84,43 @@ function ReportForm({ onDone }: { onDone: () => void }) {
     setLocating(true);
     setError(null);
     try {
-      const p = await getPosition();
-      setPos(p);
-      setFlyTo({ pos: p, key: Date.now() });
-    } catch {
-      setError(t("nearby.denied"));
+      const fix = await getFix();
+      setPos(fix.pos);
+      setAccuracy(Math.round(fix.accuracy));
+      setFlyTo({ pos: fix.pos, key: Date.now() });
+    } catch (e) {
+      setError(t(geoErrorKey(e)));
     } finally {
       setLocating(false);
     }
   }
 
-  function pickFile(f: File | undefined) {
+  /** Downscales the photo (≤ 1280 px, ≤ 2 MB JPEG) before it is ever uploaded. */
+  async function pickFile(f: File | undefined) {
     if (!f) return;
-    if (!/^image\/(jpeg|png|webp)$/.test(f.type) || f.size > 4.5 * 1024 * 1024) {
-      setError(t("report.photoHint"));
-      return;
+    if (!f.type.startsWith("image/")) return setError(t("err.bad_file_type"));
+    setError(null);
+    setProcessing(true);
+    try {
+      const small = await shrinkImage(f);
+      setFile(small);
+      setPreview(URL.createObjectURL(small));
+    } catch (e) {
+      setError(t(e instanceof Error && e.message === "too_large" ? "err.file_too_large" : "report.photoBad"));
+    } finally {
+      setProcessing(false);
     }
-    setFile(f);
-    setPreview(URL.createObjectURL(f));
+  }
+
+  function clearFile() {
+    setFile(null);
+    setPreview(null);
+    for (const r of [cameraRef, galleryRef]) if (r.current) r.current.value = "";
   }
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
+    if (!category) return setError(t("report.needCategory"));
     if (!pos) return setError(t("report.needLocation"));
     setBusy(true);
     setError(null);
@@ -128,7 +148,7 @@ function ReportForm({ onDone }: { onDone: () => void }) {
       if (d.telegram) setTgPreview(d.telegram);
       else onDone();
     } catch (err) {
-      setError(err instanceof Error ? err.message : t("common.error"));
+      setError(errText(err));
     } finally {
       setBusy(false);
     }
@@ -140,7 +160,7 @@ function ReportForm({ onDone }: { onDone: () => void }) {
         <h2 className="text-lg font-bold">{t("report.title")}</h2>
         <p className="text-sm text-zinc-500">{t("report.subtitle")}</p>
       </div>
-      <button onClick={onDone} aria-label={t("common.close")} className="grid size-9 shrink-0 place-items-center rounded-xl hover:bg-zinc-900/5 dark:hover:bg-white/10">
+      <button onClick={onDone} aria-label={t("common.close")} className="grid size-11 shrink-0 place-items-center rounded-xl hover:bg-zinc-900/5 dark:hover:bg-white/10">
         <X className="size-5" />
       </button>
     </div>
@@ -188,10 +208,16 @@ function ReportForm({ onDone }: { onDone: () => void }) {
             </Button>
           </div>
           <div className="relative h-52 overflow-hidden rounded-2xl border border-zinc-900/10 dark:border-white/10">
-            <MapView className="size-full" zoom={12} hazards={hazards} picked={pos} flyTo={flyTo} onMapClick={setPos} />
+            <MapView className="size-full" zoom={12} hazards={hazards} picked={pos} flyTo={flyTo}
+              onMapClick={(p) => { setPos(p); setAccuracy(null); }} />
             <div className="pointer-events-none absolute inset-x-2 bottom-2 z-[500] flex justify-center">
               <span className="glass rounded-full px-3 py-1 text-xs font-medium tabular-nums">
                 {pos ? `${pos[0].toFixed(5)}, ${pos[1].toFixed(5)}` : t("report.pickHint")}
+                {pos && accuracy !== null && (
+                  <span className={cn("ml-2 font-semibold", accuracy <= 30 ? "text-emerald-600" : accuracy <= 100 ? "text-orange-500" : "text-red-500")}>
+                    {t("report.accuracy", { n: accuracy })}
+                  </span>
+                )}
               </span>
             </div>
           </div>
@@ -257,37 +283,50 @@ function ReportForm({ onDone }: { onDone: () => void }) {
         {/* Photo */}
         <div className="space-y-2">
           <span className="text-xs font-semibold uppercase tracking-wide text-zinc-500">{t("report.photo")}</span>
-          <input ref={fileRef} type="file" accept="image/jpeg,image/png,image/webp" capture="environment" hidden onChange={(e) => pickFile(e.target.files?.[0])} />
-          {preview ? (
+          {/* Two inputs: `capture` opens the camera directly, the other one the gallery / file picker. */}
+          <input ref={cameraRef} type="file" accept="image/*" capture="environment" hidden onChange={(e) => pickFile(e.target.files?.[0])} />
+          <input ref={galleryRef} type="file" accept="image/*" hidden onChange={(e) => pickFile(e.target.files?.[0])} />
+          {processing ? (
+            <div className="flex h-32 items-center justify-center gap-2 rounded-2xl border-2 border-dashed border-zinc-900/15 text-sm text-zinc-500 dark:border-white/15">
+              <Loader2 className="size-4 animate-spin" /> {t("report.processing")}
+            </div>
+          ) : preview ? (
             <motion.div initial={{ opacity: 0, scale: 0.96 }} animate={{ opacity: 1, scale: 1 }} className="relative overflow-hidden rounded-2xl">
               {/* eslint-disable-next-line @next/next/no-img-element -- local blob preview */}
               <img src={preview} alt="" className="h-48 w-full object-cover" />
               <button
                 type="button"
-                onClick={() => { setFile(null); setPreview(null); if (fileRef.current) fileRef.current.value = ""; }}
+                onClick={clearFile}
                 className="absolute right-2 top-2 inline-flex items-center gap-1 rounded-xl bg-black/60 px-2.5 py-1.5 text-xs font-semibold text-white backdrop-blur"
               >
                 <Trash2 className="size-3.5" /> {t("report.remove")}
               </button>
             </motion.div>
           ) : (
-            <button
-              type="button"
-              onClick={() => fileRef.current?.click()}
+            <div
               onDragOver={(e) => e.preventDefault()}
-              onDrop={(e) => { e.preventDefault(); pickFile(e.dataTransfer.files[0]); }}
-              className="flex w-full flex-col items-center gap-2 rounded-2xl border-2 border-dashed border-zinc-900/15 p-6 text-sm text-zinc-500 transition hover:border-emerald-500 hover:bg-emerald-500/5 dark:border-white/15"
+              onDrop={(e) => { e.preventDefault(); void pickFile(e.dataTransfer.files[0]); }}
+              className="space-y-2 rounded-2xl border-2 border-dashed border-zinc-900/15 p-4 text-center text-sm text-zinc-500 dark:border-white/15"
             >
-              <span className="flex gap-2"><Camera className="size-5" /><ImagePlus className="size-5" /></span>
-              <span className="font-medium">{t("report.photo")}</span>
-              <span className="text-xs">{t("report.photoHint")}</span>
-            </button>
+              <div className="grid grid-cols-2 gap-2">
+                <Button type="button" variant="outline" onClick={() => cameraRef.current?.click()}>
+                  <Camera className="size-4" /> {t("report.camera")}
+                </Button>
+                <Button type="button" variant="outline" onClick={() => galleryRef.current?.click()}>
+                  <ImagePlus className="size-4" /> {t("report.gallery")}
+                </Button>
+              </div>
+              <span className="block text-xs">{t("report.photoHint")}</span>
+            </div>
           )}
         </div>
 
-        {error && <p className="rounded-xl bg-red-500/10 px-3 py-2 text-sm text-red-600 dark:text-red-400">{error}</p>}
+      </div>
 
-        <Button type="submit" size="lg" className="w-full" disabled={busy}>
+      {/* Sticky footer: the error and "Yuborish" stay visible while the form scrolls. */}
+      <div className="sticky bottom-0 z-10 space-y-2 border-t border-zinc-900/5 bg-[var(--bg)]/90 px-5 pb-[max(1rem,env(safe-area-inset-bottom))] pt-3 backdrop-blur-xl dark:border-white/5">
+        {error && <p role="alert" className="rounded-xl bg-red-500/10 px-3 py-2 text-sm text-red-600 dark:text-red-400">{error}</p>}
+        <Button type="submit" size="lg" className="w-full" disabled={busy || processing}>
           {busy ? <Loader2 className="size-4 animate-spin" /> : <Send className="size-4" />}
           {busy ? t("report.sending") : t("report.submit")}
         </Button>
