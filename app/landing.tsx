@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { motion } from "framer-motion";
-import { ArrowRight, BellRing, Map, Navigation, Radar, ShieldCheck, Sparkles, ThumbsUp, Users } from "lucide-react";
+import { ArrowRight, BellRing, Map, Navigation, Radar, Send, ShieldCheck, Sparkles, ThumbsUp, Users } from "lucide-react";
 import { useHazards, useI18n } from "@/components/providers";
 import { HazardCard } from "@/components/hazard-card";
 import { MapView } from "@/components/map";
@@ -17,6 +17,8 @@ const FEATURES: { icon: typeof Map; t: TKey; d: TKey; cls: string }[] = [
   { icon: BellRing, t: "f.tg.t", d: "f.tg.d", cls: "from-orange-400 to-red-500" },
   { icon: ShieldCheck, t: "f.admin.t", d: "f.admin.d", cls: "from-violet-400 to-fuchsia-600" },
 ];
+
+const BOT = process.env.NEXT_PUBLIC_BOT_USERNAME?.replace(/^@/, "");
 
 const fadeUp = {
   hidden: { opacity: 0, y: 24 },
@@ -87,6 +89,35 @@ export function Landing() {
           {t("stats.more")} <ArrowRight className="size-4" />
         </Link>
       </div>
+
+      {/* Telegram bot — the whole card is the link, so the "button" is a styled span (no nested interactive elements). */}
+      {BOT && (
+        <motion.a
+          href={`https://t.me/${BOT}`}
+          target="_blank"
+          rel="noopener noreferrer"
+          initial="hidden"
+          whileInView="show"
+          viewport={{ once: true }}
+          variants={fadeUp}
+          className="group mt-6 block rounded-2xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500/60"
+        >
+          <Card className="flex flex-col gap-4 rounded-2xl border-sky-500/20 bg-sky-500/10 p-5 dark:border-sky-400/20! dark:bg-sky-500/10! transition group-hover:-translate-y-0.5 group-hover:shadow-xl sm:flex-row sm:items-center">
+            <div className="flex items-center gap-4 sm:flex-1">
+              <span className="grid size-12 shrink-0 place-items-center rounded-2xl bg-sky-500 text-white shadow-lg shadow-sky-500/25">
+                <Send className="size-6" />
+              </span>
+              <div>
+                <h2 className="font-bold">{t("botCard.title")}</h2>
+                <p className="mt-0.5 text-sm text-zinc-600 dark:text-zinc-400">{t("botCard.text")}</p>
+              </div>
+            </div>
+            <span className="inline-flex h-11 w-full shrink-0 items-center justify-center gap-2 rounded-xl bg-sky-500 px-5 text-sm font-semibold text-white shadow-lg shadow-sky-500/25 transition group-hover:bg-sky-400 sm:w-auto md:h-10">
+              {t("botCard.open")} <ArrowRight className="size-4" />
+            </span>
+          </Card>
+        </motion.a>
+      )}
 
       {/* Features */}
       <section className="py-16">

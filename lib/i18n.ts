@@ -250,6 +250,9 @@ const uz = {
   "stats.title": "Statistika",
   "stats.subtitle": "Barcha raqamlar bazadan jonli olinadi va har 30 soniyada yangilanadi",
   "stats.more": "Batafsil statistika",
+  "botCard.title": "SafeWay Telegram boti",
+  "botCard.text": "Yaqin atrofdagi xavflar haqida darhol xabar oling, botdan xavf qo'shing va statistikani ko'ring.",
+  "botCard.open": "Botni ochish",
   "theme.toggle": "Mavzuni almashtirish",
 };
 
@@ -505,6 +508,9 @@ const ru: Dict = {
   "stats.title": "Статистика",
   "stats.subtitle": "Все цифры берутся из базы и обновляются каждые 30 секунд",
   "stats.more": "Подробная статистика",
+  "botCard.title": "Telegram-бот SafeWay",
+  "botCard.text": "Мгновенно узнавайте об опасностях поблизости, добавляйте их через бота и смотрите статистику.",
+  "botCard.open": "Открыть бота",
   "theme.toggle": "Сменить тему",
 };
 
@@ -757,6 +763,9 @@ const en: Dict = {
   "stats.title": "Statistics",
   "stats.subtitle": "Live numbers from the database, refreshed every 30 seconds",
   "stats.more": "Detailed statistics",
+  "botCard.title": "SafeWay Telegram bot",
+  "botCard.text": "Get instant alerts about hazards nearby, report hazards from the bot and check the statistics.",
+  "botCard.open": "Open the bot",
   "theme.toggle": "Toggle theme",
 };
 
