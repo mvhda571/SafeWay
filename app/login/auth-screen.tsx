@@ -9,7 +9,7 @@ import { Button, Card, inputCls } from "@/components/ui";
 import { isAdmin, type Role } from "@/lib/types";
 import { api, cn, jsonInit } from "@/lib/utils";
 
-export interface DemoAccount { role: Role; email: string; password: string }
+export interface DemoAccount { role: Role; email: string; password: string; label?: string }
 
 export function AuthScreen({ demo }: { demo: DemoAccount[] }) {
   const { t, setLocale } = useI18n();
@@ -61,7 +61,7 @@ export function AuthScreen({ demo }: { demo: DemoAccount[] }) {
   }
 
   return (
-    <div className="relative mx-auto flex min-h-[calc(100dvh-4rem)] max-w-md items-center px-4 py-10">
+    <div className="relative mx-auto flex min-h-[calc(100dvh-4rem)] max-w-md items-center px-4 pt-10 pb-28 md:py-10">
       <div className="pointer-events-none absolute -left-10 top-20 size-56 rounded-full bg-emerald-400/30 blur-3xl" />
       <div className="pointer-events-none absolute -right-10 bottom-20 size-56 rounded-full bg-indigo-500/30 blur-3xl" />
 
@@ -127,12 +127,19 @@ export function AuthScreen({ demo }: { demo: DemoAccount[] }) {
                   key={d.email}
                   disabled={busy}
                   onClick={(e) => submit(e, d)}
-                  className="rounded-lg border border-zinc-900/10 px-2 py-1.5 text-[11px] font-semibold transition hover:bg-white dark:border-white/10 dark:hover:bg-white/10"
+                  className={cn(
+                    "rounded-lg border px-2 py-1.5 text-[11px] font-semibold transition",
+                    d.label === "Super Admin"
+                      ? "border-amber-400/50 bg-amber-50 text-amber-700 hover:bg-amber-100 dark:bg-amber-500/10 dark:text-amber-300 dark:border-amber-400/30"
+                      : "border-zinc-900/10 hover:bg-white dark:border-white/10 dark:hover:bg-white/10",
+                  )}
                 >
-                  {t(`role.${d.role}`)}
+                  {d.label ?? t(`role.${d.role}`)}
+                  {d.label === "Super Admin" && <span className="ml-1 opacity-60">⚠</span>}
                 </button>
               ))}
             </div>
+            <p className="mt-2 text-[10px] text-zinc-400">Demo maʼlumotlar. ⚠ Super Admin — sinov uchun.</p>
           </div>}
         </Card>
       </motion.div>
@@ -141,12 +148,14 @@ export function AuthScreen({ demo }: { demo: DemoAccount[] }) {
 }
 
 function IconInput({
-  icon: Icon, value, onChange, ...props
+  icon: Icon, value, onChange, placeholder, ...props
 }: { icon: typeof Mail; value: string; onChange: (v: string) => void } & Omit<React.InputHTMLAttributes<HTMLInputElement>, "onChange" | "value">) {
+  const id = placeholder ? `input-${placeholder.toLowerCase().replace(/\s+/g, "-")}` : undefined;
   return (
     <div className="relative">
-      <Icon className="absolute left-3.5 top-1/2 size-4 -translate-y-1/2 text-zinc-400" />
-      <input className={cn(inputCls, "h-11 pl-10")} value={value} onChange={(e) => onChange(e.target.value)} {...props} />
+      {placeholder && id && <label htmlFor={id} className="sr-only">{placeholder}</label>}
+      <Icon className="absolute left-3.5 top-1/2 size-4 -translate-y-1/2 text-zinc-400" aria-hidden />
+      <input id={id} placeholder={placeholder} className={cn(inputCls, "h-11 pl-10")} value={value} onChange={(e) => onChange(e.target.value)} {...props} />
     </div>
   );
 }

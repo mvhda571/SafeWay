@@ -188,7 +188,7 @@ export function MapScreen() {
           ))}
         </div>
 
-        <div className="no-scrollbar flex-1 space-y-3 overflow-y-auto px-4 pb-6">
+        <div className="no-scrollbar flex-1 space-y-3 overflow-y-auto px-4 pb-24 md:pb-6">
           {tab === "list" ? (
             <>
               <p className="text-xs text-zinc-500">{t("list.count", { n: filtered.length })}</p>
@@ -229,7 +229,10 @@ function ChipRow({ label, children }: { label: string; children: React.ReactNode
   return (
     <div>
       <p className="mb-1.5 text-[11px] font-semibold uppercase tracking-wide text-zinc-500">{label}</p>
-      <div className="no-scrollbar -mx-4 flex gap-1.5 overflow-x-auto px-4">{children}</div>
+      <div className="relative">
+        <div className="no-scrollbar -mx-4 flex gap-1.5 overflow-x-auto px-4 pb-0.5">{children}</div>
+        <div className="pointer-events-none absolute inset-y-0 right-0 w-8 bg-gradient-to-l from-white/80 to-transparent dark:from-zinc-900/70" />
+      </div>
     </div>
   );
 }

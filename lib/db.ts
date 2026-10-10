@@ -113,6 +113,15 @@ const telegramSchema = new Schema(
 /** Small key/value collection (e.g. the generated session secret). */
 const metaSchema = new Schema({ _id: String, value: String });
 
+const pushSubSchema = new Schema(
+  {
+    userId: { type: String, required: true },
+    endpoint: { type: String, required: true, unique: true },
+    keys: { type: { _id: false, p256dh: String, auth: String }, required: true },
+  },
+  { timestamps: { createdAt: true, updatedAt: false } },
+);
+
 // "webusers", not "users": the Telegram bot keeps its own subscribers in "users" (unique tgId).
 export const UserModel = models.User || model("User", userSchema, "webusers");
 export const HazardModel = models.Hazard || model("Hazard", hazardSchema);
@@ -121,3 +130,4 @@ export const ImageModel = models.Image || model("Image", imageSchema);
 export const HazardImageModel = models.HazardImage || model("HazardImage", new Schema({}, { strict: false }), "hazardimages");
 export const TelegramModel = models.Telegram || model("Telegram", telegramSchema, "telegram");
 export const MetaModel = models.Meta || model("Meta", metaSchema, "meta");
+export const PushSubModel = models.PushSub || model("PushSub", pushSubSchema, "push_subs");

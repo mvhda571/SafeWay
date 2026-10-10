@@ -40,6 +40,8 @@ export function ConfirmButton({ hazard, compact }: { hazard: HazardDTO; compact?
     }
   }
 
+  if (hazard.status === "resolved") return null;
+
   return (
     <motion.button
       whileTap={{ scale: 0.92 }}
@@ -104,7 +106,7 @@ export function HazardCard({
         </div>
         <div className="flex items-center justify-between gap-2">
           <CategoryChip category={hazard.category} />
-          <span className="flex items-center gap-2 text-[11px] text-zinc-400">
+          <span className="flex items-center gap-2 text-[11px] text-zinc-400" suppressHydrationWarning>
             {ago(hazard.createdAt)}
             <Link href={`/hazards/${hazard.id}`} onClick={(e) => e.stopPropagation()}
               className="-my-3 inline-flex min-h-11 items-center font-semibold text-emerald-600 hover:underline dark:text-emerald-400 md:my-0 md:min-h-0">
@@ -139,7 +141,7 @@ export function HazardPopup({ hazard }: { hazard: HazardDTO }) {
       </div>
       <p className="!m-0 text-sm font-semibold leading-snug">{hazard.title}</p>
       {hazard.description && <p className="!m-0 text-xs text-zinc-500">{hazard.description}</p>}
-      <p className="!m-0 text-[11px] text-zinc-400">{t("card.by")}: {hazard.authorName} · {ago(hazard.createdAt)}</p>
+      <p className="!m-0 text-[11px] text-zinc-400" suppressHydrationWarning>{t("card.by")}: {hazard.authorName} · {ago(hazard.createdAt)}</p>
       <div className="flex items-center justify-between gap-2">
         <ConfirmButton hazard={hazard} compact />
         <Link href={`/hazards/${hazard.id}`} className="inline-flex min-h-11 items-center text-xs font-semibold !text-emerald-600 hover:underline md:min-h-0">

@@ -3,6 +3,7 @@ import { countRecentHazards, createHazard, listHazards } from "@/lib/store";
 import { toDTOs } from "@/lib/hazards";
 import { notifyHighHazard, CATEGORY_UZ } from "@/lib/telegram";
 import { reverseGeocode } from "@/lib/geocode";
+import { notifyNewHazard } from "@/lib/push";
 import { CATEGORIES, SEVERITIES, STATUSES, type Category, type Severity, type Status } from "@/lib/types";
 
 /** Anti-spam: at most RATE_MAX new hazards per user within RATE_WINDOW. */
@@ -63,9 +64,10 @@ export async function POST(req: Request) {
       createdBy: session.sub,
     });
 
-    // The hazard is already saved; a Telegram failure must never fail the request.
+    // The hazard is already saved; Telegram/push failures must never fail the request.
     const origin = process.env.SITE_URL || process.env.URL || new URL(req.url).origin;
     const telegram = severity === "high" ? await notifyHighHazard(hazard, session.name, origin).catch(() => null) : null;
+    void notifyNewHazard(hazard);
     const [dto] = await toDTOs([hazard], session.sub);
     return Response.json({ hazard: dto, telegram }, { status: 201 });
   });

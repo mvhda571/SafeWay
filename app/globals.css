@@ -104,3 +104,14 @@ body {
   .leaflet-touch .leaflet-bar a { width: 44px !important; height: 44px !important; line-height: 44px !important; font-size: 22px !important; }
   input, select, textarea { font-size: 16px !important; }
 }
+
+/* Hide Netlify Identity widget and "Powered by Netlify" badge */
+#netlify-identity-widget,
+[data-netlify-identity-button],
+.netlify-identity-menu-btn,
+[id^="netlify-"],
+[class^="netlify-"],
+iframe[src*="netlify.com"],
+a[href*="netlify.com"][target="_blank"]:not([aria-label]) {
+  display: none !important;
+}

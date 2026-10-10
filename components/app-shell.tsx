@@ -3,14 +3,16 @@
 import { Suspense } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { motion } from "framer-motion";
+import { LayoutGroup, motion } from "framer-motion";
 import { BarChart3, Home, LayoutDashboard, LogIn, LogOut, Map, Moon, Navigation, Plus, Shield, Sun, UserRound } from "lucide-react";
 import type { Locale } from "@/lib/i18n";
 import { useI18n, useAuth, useUi } from "./providers";
 import { EmergencyBar } from "./emergency-bar";
 import { ReportModal } from "./report-modal";
+import { PushBell } from "./push-bell";
 import { toggleTheme } from "./theme";
 import { TelegramBridge } from "./telegram-bridge";
+import { useTelegram } from "@/lib/use-telegram";
 import { LOCALES } from "@/lib/i18n";
 import { isAdmin } from "@/lib/types";
 import { cn, initials } from "@/lib/utils";
@@ -21,6 +23,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const { user, logout } = useAuth();
   const { openReport } = useUi();
   const admin = isAdmin(user?.role);
+  const { tg } = useTelegram();
 
   const nav = [
     { href: "/", label: t("nav.home"), icon: Home },
@@ -29,6 +32,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     { href: "/stats", label: t("nav.stats"), icon: BarChart3 },
     ...(admin ? [{ href: "/admin", label: t("nav.admin"), icon: LayoutDashboard }] : []),
   ];
+
+  // In Telegram Mini App: hide the bottom navigation (Telegram provides its own back/close)
+  const inTelegram = !!tg;
 
   return (
     <div className="relative flex min-h-dvh flex-col">
@@ -75,6 +81,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             >
               <Plus className="size-4" /> {t("nav.report")}
             </button>
+            <PushBell />
 
             {/* Phone: one 44 px button cycling UZ → RU → EN; desktop: the full switcher. */}
             <button
@@ -84,24 +91,26 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             >
               {locale}
             </button>
-            <div className="hidden rounded-xl bg-zinc-900/5 p-0.5 dark:bg-white/10 md:flex" role="group" aria-label="Language">
-              {LOCALES.map((l) => (
-                <button
-                  key={l}
-                  onClick={() => setLocale(l)}
-                  aria-pressed={locale === l}
-                  className={cn(
-                    "relative rounded-lg px-2 py-1 text-xs font-bold uppercase text-zinc-500 transition",
-                    locale === l && "text-zinc-900 dark:text-white",
-                  )}
-                >
-                  {locale === l && (
-                    <motion.span layoutId="lang-pill" className="absolute inset-0 -z-10 rounded-lg bg-white shadow-sm dark:bg-zinc-700" />
-                  )}
-                  {l}
-                </button>
-              ))}
-            </div>
+            <LayoutGroup id="lang-switcher">
+              <div className="hidden rounded-xl bg-zinc-900/5 p-0.5 dark:bg-white/10 md:flex" role="group" aria-label="Language">
+                {LOCALES.map((l) => (
+                  <button
+                    key={l}
+                    onClick={() => setLocale(l)}
+                    aria-pressed={locale === l}
+                    className={cn(
+                      "relative rounded-lg px-2 py-1 text-xs font-bold uppercase text-zinc-500 transition",
+                      locale === l && "text-zinc-900 dark:text-white",
+                    )}
+                  >
+                    {locale === l && (
+                      <motion.span layoutId="lang-pill" className="absolute inset-0 -z-10 rounded-lg bg-white shadow-sm dark:bg-zinc-700" />
+                    )}
+                    {l}
+                  </button>
+                ))}
+              </div>
+            </LayoutGroup>
 
             <button
               onClick={toggleTheme}
@@ -145,8 +154,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           so the last element on a page can always be scrolled clear of them. */}
       <main className="flex-1 pb-[calc(9.5rem+env(safe-area-inset-bottom))] md:pb-0">{children}</main>
 
-      {/* Mobile bottom navigation */}
-      <nav className="glass fixed inset-x-3 bottom-[max(0.75rem,env(safe-area-inset-bottom),var(--tg-safe-bottom,0px))] z-[1100] rounded-2xl shadow-2xl md:hidden">
+      {/* Mobile bottom navigation — hidden inside Telegram Mini App */}
+      <nav className={cn("glass fixed inset-x-3 bottom-[max(0.75rem,env(safe-area-inset-bottom),var(--tg-safe-bottom,0px))] z-[1100] rounded-2xl shadow-2xl md:hidden", inTelegram && "hidden")}>
         <div className="grid grid-cols-5 items-center">
           {nav.slice(0, 2).map((n) => <BottomItem key={n.href} {...n} />)}
           <div className="flex justify-center">

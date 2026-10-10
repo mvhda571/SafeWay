@@ -74,6 +74,14 @@ export interface TelegramLog {
   createdAt: string;
 }
 
+export interface PushSub {
+  id: string;
+  userId: string;
+  endpoint: string;
+  keys: { p256dh: string; auth: string };
+  createdAt: string;
+}
+
 export interface Session {
   sub: string;
   name: string;

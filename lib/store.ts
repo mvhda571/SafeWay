@@ -1,8 +1,8 @@
 import "server-only";
 import { randomBytes } from "crypto";
 import { isValidObjectId, Types } from "mongoose";
-import type { Category, Hazard, ProfileStats, SavedPlace, Status, TelegramLog, User } from "./types";
-import { connectDB, HazardImageModel, HazardModel, ImageModel, MetaModel, TelegramModel, UserModel } from "./db";
+import type { Category, Hazard, ProfileStats, PushSub, SavedPlace, Status, TelegramLog, User } from "./types";
+import { connectDB, HazardImageModel, HazardModel, ImageModel, MetaModel, PushSubModel, TelegramModel, UserModel } from "./db";
 
 /**
  * Data access layer on MongoDB. Every function returns plain objects with string `id`s and ISO dates,
@@ -244,4 +244,39 @@ export async function addTelegram(entry: Omit<TelegramLog, "id" | "createdAt">) 
   await connectDB();
   const d = await TelegramModel.create(entry);
   return toTelegram(d.toObject() as Doc);
+}
+
+// ---------- push subscriptions ----------
+export async function listPushSubs(): Promise<PushSub[]> {
+  await connectDB();
+  const docs = (await PushSubModel.find().lean()) as Doc[];
+  return docs.map((d) => ({
+    id: d._id.toString(),
+    userId: d.userId as string,
+    endpoint: d.endpoint as string,
+    keys: d.keys as { p256dh: string; auth: string },
+    createdAt: iso(d.createdAt),
+  }));
+}
+
+export async function addPushSub(entry: Omit<PushSub, "id" | "createdAt">) {
+  await connectDB();
+  const d = await PushSubModel.findOneAndUpdate(
+    { endpoint: entry.endpoint },
+    { $set: { userId: entry.userId, keys: entry.keys } },
+    { upsert: true, new: true, lean: true },
+  ) as Doc;
+  return {
+    id: d._id.toString(),
+    userId: entry.userId,
+    endpoint: entry.endpoint,
+    keys: entry.keys,
+    createdAt: iso(d.createdAt),
+  };
+}
+
+export async function removePushSub(endpoint: string) {
+  await connectDB();
+  const r = await PushSubModel.deleteOne({ endpoint });
+  return r.deletedCount > 0;
 }

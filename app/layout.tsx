@@ -9,6 +9,17 @@ const inter = Inter({ subsets: ["latin", "cyrillic"], variable: "--font-inter" }
 export const metadata: Metadata = {
   title: { default: "SafeWay — Bolalar uchun xavfsiz yo'l", template: "%s · SafeWay" },
   description: "Ota-onalar va maktablar uchun xavf xaritasi, xavfsiz yo'nalish va favqulodda yordam.",
+  manifest: "/manifest.json",
+  openGraph: {
+    title: "SafeWay — Bolalar uchun xavfsiz yo'l",
+    description: "Ota-onalar va maktablar uchun xavf xaritasi, xavfsiz yo'nalish va favqulodda yordam.",
+    type: "website",
+    images: [{ url: "/opengraph-image", width: 1200, height: 630 }],
+  },
+  twitter: {
+    card: "summary_large_image",
+    images: ["/opengraph-image"],
+  },
 };
 
 export const viewport: Viewport = {
@@ -29,6 +40,8 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     <html lang="uz" className={`${inter.variable} h-full antialiased`} suppressHydrationWarning>
       <head>
         <script dangerouslySetInnerHTML={{ __html: themeScript }} />
+        {/* Telegram Mini App SDK — loaded only when opened inside Telegram */}
+        <script src="https://telegram.org/js/telegram-web-app.js" />
       </head>
       <body className="min-h-full font-sans">
         <Providers>
