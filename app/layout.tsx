@@ -40,8 +40,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     <html lang="uz" className={`${inter.variable} h-full antialiased`} suppressHydrationWarning>
       <head>
         <script dangerouslySetInnerHTML={{ __html: themeScript }} />
-        {/* Telegram Mini App SDK — loaded only when opened inside Telegram */}
-        <script src="https://telegram.org/js/telegram-web-app.js" />
+        {/* Telegram SDK is loaded lazily by TelegramBridge using Next.js <Script> */}
       </head>
       <body className="min-h-full font-sans">
         <Providers>

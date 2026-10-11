@@ -57,7 +57,7 @@ export function DailyArea({ data }: { data: { date: string; count: number }[] })
         </defs>
         <CartesianGrid vertical={false} stroke={c.grid} />
         <XAxis dataKey="label" tickLine={false} axisLine={{ stroke: c.grid }} tick={{ fill: c.muted, fontSize: 11 }} minTickGap={16} />
-        <YAxis allowDecimals={false} tickLine={false} axisLine={false} tick={{ fill: c.muted, fontSize: 11 }} />
+        <YAxis allowDecimals={false} domain={[0, "auto"]} tickLine={false} axisLine={false} tick={{ fill: c.muted, fontSize: 11 }} />
         <Tooltip cursor={{ stroke: c.muted, strokeDasharray: "3 3" }} content={<TooltipBox suffix={t("admin.reports")} />} />
         <Area type="monotone" dataKey="count" stroke={c.series} strokeWidth={2} fill="url(#dailyFill)"
           activeDot={{ r: 5, stroke: c.surface, strokeWidth: 2 }} />

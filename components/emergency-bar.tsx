@@ -1,33 +1,26 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { Ambulance, Flame, Phone, ShieldAlert, Siren, X, GraduationCap } from "lucide-react";
 import { useI18n } from "./providers";
 import type { TKey } from "@/lib/i18n";
 
+const inspectorPhone = process.env.NEXT_PUBLIC_INSPECTOR_PHONE;
+
 const NUMBERS: { key: TKey; tel: string; icon: typeof Phone; cls: string }[] = [
   { key: "sos.police", tel: "102", icon: ShieldAlert, cls: "from-blue-500 to-blue-700" },
   { key: "sos.ambulance", tel: "103", icon: Ambulance, cls: "from-red-500 to-red-700" },
   { key: "sos.fire", tel: "1050", icon: Flame, cls: "from-orange-500 to-orange-700" },
-  {
-    key: "sos.inspector",
-    tel: process.env.NEXT_PUBLIC_INSPECTOR_PHONE ?? "+998712000000",
-    icon: GraduationCap,
-    cls: "from-emerald-500 to-emerald-700",
-  },
+  ...(inspectorPhone
+    ? [{ key: "sos.inspector" as TKey, tel: inspectorPhone, icon: GraduationCap, cls: "from-emerald-500 to-emerald-700" }]
+    : []),
 ];
 
-/** Floating SOS panel (102 / 103 / 1050 / school inspector) — always visible above the mobile bottom nav. */
+/** Floating SOS panel (102 / 103 / 1050 / school inspector) — collapsed by default on all screens. */
 export function EmergencyBar() {
   const { t } = useI18n();
   const [open, setOpen] = useState(false);
-
-  // Desktop: the numbers are always visible. Phone: collapsed into one button so the map stays usable.
-  useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- depends on the viewport, unknown during SSR
-    if (matchMedia("(min-width: 768px)").matches) setOpen(true);
-  }, []);
 
   return (
     // Phone: sits above the floating bottom nav and the iPhone home indicator.

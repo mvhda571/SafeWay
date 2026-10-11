@@ -31,6 +31,10 @@ const CATEGORY_TITLE: Record<Category, string> = {
   unlit_street: "Yoritilmagan ko'cha",
   stray_dogs: "Qarovsiz itlar",
   speeding: "Tezkor haydovchilar",
+  no_crossing: "Piyoda o'tish joyi yo'q",
+  construction: "Qurilish/chuqur",
+  broken_light: "Svetofor ishlamaydi",
+  other: "Boshqa xavf",
 };
 
 /** Normalises site and bot documents (bot ones only have `location`, `voters`, `hasImage`, `reporterTgId`). */

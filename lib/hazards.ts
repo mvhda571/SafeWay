@@ -10,10 +10,10 @@ function abbreviateName(full: string): string {
 
 export async function toDTOs(hazards: Hazard[], userId?: string): Promise<HazardDTO[]> {
   const names = await userNames(hazards.map((h) => h.createdBy));
-  return hazards.map(({ confirmations, ...h }) => ({
+  return hazards.map(({ confirmations, createdBy, ...h }) => ({
     ...h,
     confirmCount: confirmations.length,
     confirmedByMe: !!userId && confirmations.includes(userId),
-    authorName: (() => { const n = names.get(h.createdBy); return n ? abbreviateName(n) : h.createdBy.startsWith("tg:") ? "Telegram" : "SafeWay"; })(),
+    authorName: (() => { const n = names.get(createdBy); return n ? abbreviateName(n) : createdBy.startsWith("tg:") ? "Telegram" : "SafeWay"; })(),
   }));
 }

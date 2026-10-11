@@ -7,6 +7,9 @@ export async function GET(req: Request) {
   url.searchParams.set("format", "jsonv2");
   url.searchParams.set("limit", "5");
   url.searchParams.set("countrycodes", "uz");
+  // Prefer Tashkent results — bias toward the city viewport
+  url.searchParams.set("viewbox", "69.1,41.5,69.5,41.1");
+  url.searchParams.set("bounded", "0");
   try {
     const res = await fetch(url, { headers: { "User-Agent": "SafeWay/1.0 (school safety demo)" } });
     if (!res.ok) throw new Error(String(res.status));

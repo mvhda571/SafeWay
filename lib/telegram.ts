@@ -7,6 +7,10 @@ export const CATEGORY_UZ: Record<Hazard["category"], string> = {
   unlit_street: "Yoritilmagan ko'cha",
   stray_dogs: "Qarovsiz itlar",
   speeding: "Tezkor haydovchilar",
+  no_crossing: "Piyoda o'tish joyi yo'q",
+  construction: "Qurilish/chuqur",
+  broken_light: "Svetofor ishlamaydi",
+  other: "Boshqa xavf",
 };
 
 export function buildTelegramMessage(h: Hazard, author: string, origin: string) {

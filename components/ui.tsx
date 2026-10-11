@@ -1,7 +1,7 @@
 "use client";
 
 import { forwardRef } from "react";
-import { CarFront, CircleDot, Dog, LightbulbOff, ShieldCheck, Search, Clock, type LucideIcon } from "lucide-react";
+import { CarFront, CircleDot, Construction, Dog, HelpCircle, LightbulbOff, ShieldCheck, Search, Clock, TrafficCone, Crosshair, type LucideIcon } from "lucide-react";
 import type { Category, Severity, Status } from "@/lib/types";
 import { SEVERITY_COLOR } from "@/lib/types";
 import { cn } from "@/lib/utils";
@@ -12,6 +12,10 @@ export const CATEGORY_ICON: Record<Category, LucideIcon> = {
   unlit_street: LightbulbOff,
   stray_dogs: Dog,
   speeding: CarFront,
+  no_crossing: Crosshair,
+  construction: Construction,
+  broken_light: TrafficCone,
+  other: HelpCircle,
 };
 
 export const STATUS_ICON: Record<Status, LucideIcon> = {

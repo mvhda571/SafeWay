@@ -85,6 +85,12 @@ export function Providers({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     document.documentElement.lang = locale;
+    const taglines: Record<string, string> = {
+      uz: "SafeWay — Bolalar uchun xavfsiz yo'l",
+      ru: "SafeWay — Безопасный путь для детей",
+      en: "SafeWay — A safer way to school",
+    };
+    document.title = taglines[locale] ?? taglines.uz;
   }, [locale]);
 
   const setLocale = useCallback((l: Locale) => {
